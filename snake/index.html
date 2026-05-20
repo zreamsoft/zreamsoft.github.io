@@ -99,6 +99,54 @@ body {
 }
 @keyframes codePulse { 0%,100% { opacity:1; } 50% { opacity:0.6; } }
 
+/* GAME OVER OVERLAY */
+.gameover-title {
+    color:#FF4444; font-size:clamp(28px,8vw,48px); font-weight:bold;
+    letter-spacing:clamp(4px,2vw,10px); margin-bottom:12px;
+    text-shadow:0 0 30px rgba(255,68,68,0.5);
+}
+.gameover-winner {
+    color:#CCCCCC; font-size:clamp(16px,4vw,24px); font-weight:bold;
+    letter-spacing:2px;
+}
+
+/* SCORE BAR */
+#scorebar {
+    flex:0 0 auto;
+    background:#1A1A2E;
+    border-top:1px solid #00FF88;
+    border-bottom:1px solid #00FF88;
+    padding:6px 8px;
+    display:flex; flex-direction:column;
+    justify-content:center;
+    min-height:56px;
+}
+#score-player-list {
+    display:flex; flex-wrap:wrap; justify-content:space-around; align-items:center;
+    gap:6px;
+}
+.score-player-entry {
+    display:flex; flex-direction:column; align-items:center;
+    background:#0D0D1A; border-radius:6px;
+    padding:4px 10px; min-width:70px;
+}
+.score-player-name {
+    font-size:clamp(9px,2vw,11px); font-weight:bold;
+    letter-spacing:1px;
+}
+.score-player-score {
+    font-size:clamp(14px,3.5vw,20px); font-weight:bold;
+}
+.score-player-dead {
+    font-size:clamp(8px,1.8vw,10px);
+    color:#FF4444; font-weight:bold;
+}
+#score-hint {
+    text-align:center; margin-top:2px;
+    font-size:clamp(8px,1.8vw,10px); color:#8888AA;
+    min-height:14px;
+}
+
 /* CONTROLLER */
 #controller-area {
     flex:1; display:flex; flex-direction:column;
@@ -199,9 +247,22 @@ body {
                 </div>
             </div>
             <div id="lobby-wait-msg" style="color:#8888AA;font-size:clamp(11px,2.2vw,13px);margin:4px 0;"></div>
+            <div id="ice-status" style="color:#8888AA;font-size:clamp(12px,2.5vw,14px);text-align:center;min-height:20px;margin:4px 0;padding:4px 8px;border-radius:4px;"></div>
             <div id="start-hint" class="hidden" style="color:#00FF88;font-size:clamp(12px,2.5vw,14px);margin:4px 0;">Tap START or press SPACE to begin!</div>
             <div class="hint-text">QUIT: Back to menu</div>
         </div>
+
+        <!-- GAME OVER OVERLAY -->
+        <div id="gameover-overlay" class="overlay hidden">
+            <div class="gameover-title">GAME OVER</div>
+            <div id="gameover-winner" class="gameover-winner"></div>
+        </div>
+    </div>
+
+    <!-- SCORE BAR -->
+    <div id="scorebar" class="hidden-ctrl">
+        <div id="score-player-list"></div>
+        <div id="score-hint"></div>
     </div>
 
     <!-- CONTROLLER -->
@@ -237,9 +298,8 @@ const TARGET_FRAME = 1000 / 60;
 let CELL_SIZE = 20;
 let BUFFER_W = GRID_W * CELL_SIZE;
 let BUFFER_H = GRID_H * CELL_SIZE;
-let SCORE_H = 60;
 let WIN_W = BUFFER_W;
-let WIN_H = BUFFER_H + SCORE_H;
+let WIN_H = BUFFER_H;
 let CHAR_PX = 2;
 
 // ============================================================
@@ -254,7 +314,7 @@ const COLORS = {
 };
 
 // ============================================================
-// BITMAP GLYPHS
+// BITMAP GLYPHS (kept for any future canvas rendering needs)
 // ============================================================
 const DIGIT_GLYPHS = [
     [0b01110,0b10001,0b10001,0b10001,0b10001,0b10001,0b01110],
@@ -319,21 +379,19 @@ const ctx=canvas.getContext('2d');
 function resizeGame(){
     const pad=16;
     const maxW=window.innerWidth-pad;
-    const maxH=window.innerHeight*0.55;
+    const maxH=window.innerHeight*(appState===AppState.PLAYING?0.65:0.55);
     let cs=Math.floor(maxW/GRID_W);
     cs=Math.max(8,cs);
-    const tSH=Math.max(36,cs*3);
-    let totH=GRID_H*cs+tSH;
+    let totH=GRID_H*cs;
     if(totH>maxH){
-        cs=Math.floor((maxH-Math.max(36,Math.floor(maxH*0.15)))/GRID_H);
+        cs=Math.floor(maxH/GRID_H);
         cs=Math.max(8,cs);
     }
     CELL_SIZE=cs;
     BUFFER_W=GRID_W*CELL_SIZE;
     BUFFER_H=GRID_H*CELL_SIZE;
-    SCORE_H=Math.max(36,Math.floor(CELL_SIZE*3));
     WIN_W=BUFFER_W;
-    WIN_H=BUFFER_H+SCORE_H;
+    WIN_H=BUFFER_H;
     CHAR_PX=Math.max(1,Math.round(CELL_SIZE/10));
     canvas.width=WIN_W;
     canvas.height=WIN_H;
@@ -355,7 +413,13 @@ let activePlayerCount=0;
 // ============================================================
 // WEBRTC STATE
 // ============================================================
-const STUN_CONFIG={'iceServers':[{'urls':'stun:stun.l.google.com:19302'}]};
+const STUN_CONFIG={'iceServers':[
+    {'urls':'stun:stun.l.google.com:19302'},
+    {'urls':'stun:stun1.l.google.com:19302'},
+    {'urls':'stun:stun2.l.google.com:19302'},
+    {'urls':'stun:stun3.l.google.com:19302'},
+    {'urls':'stun:stun4.l.google.com:19302'}
+]};
 let hostPC=null,hostDC=null,clientPC=null,clientDC=null;
 let clientChannels=[];
 let sdpBuffer='';
@@ -366,28 +430,6 @@ let clientAnswerSDP=null;
 // ============================================================
 function fillRect(x,y,w,h,hex){ctx.fillStyle=hex;ctx.fillRect(x,y,w,h);}
 function drawCell(gx,gy,hex){const px=gx*CELL_SIZE,py=gy*CELL_SIZE;fillRect(px+1,py+1,CELL_SIZE-2,CELL_SIZE-2,hex);}
-function drawChar(x,y,c,hex){
-    ctx.fillStyle=hex;
-    let g=null;
-    if(c>='0'&&c<='9')g=DIGIT_GLYPHS[c.charCodeAt(0)-48];
-    else if(c>='A'&&c<='Z')g=LETTER_GLYPHS[c.charCodeAt(0)-65];
-    else if(c>='a'&&c<='z')g=LETTER_GLYPHS[c.charCodeAt(0)-97];
-    else if(c===':')g=EXTRA_GLYPHS[0];
-    else if(c===' '||c==='.'){if(c==='.'){ctx.fillRect(x+CHAR_PX,y+CHAR_PX*2.5,CHAR_PX,CHAR_PX);}return;}
-    if(!g)return;
-    const px=CHAR_PX;
-    for(let row=0;row<CHAR_H;row++){
-        for(let col=0;col<CHAR_W;col++){
-            if(g[row]&(0b10000>>col))ctx.fillRect(x+col*px,y+row*px,px,px);
-        }
-    }
-}
-function drawText(t,x,y,hex){
-    let cx=x;
-    const sp=(CHAR_W+1)*CHAR_PX/2;
-    for(const ch of t){drawChar(cx,y,ch,hex);cx+=sp;}
-}
-function drawCentered(t,y,hex){const sp=(CHAR_W+1)*CHAR_PX/2;drawText(t,(WIN_W-t.length*sp)/2,y,hex);}
 
 // ============================================================
 // GAME LOGIC
@@ -427,6 +469,8 @@ function startMatch(){
     resetAll();gameState.aliveCount=0;
     for(const p of gameState.players)if(p.active)gameState.aliveCount++;
     appState=AppState.PLAYING;hideAllOverlays();
+    document.getElementById('scorebar').classList.remove('hidden-ctrl');
+    document.getElementById('gameover-overlay').classList.add('hidden');
     updateControllerUI();
 }
 function hostPrepare(){
@@ -601,25 +645,49 @@ function onClientMessage(e){
         if(appState!==AppState.PLAYING){
             appState=AppState.PLAYING;
             hideAllOverlays();
+            document.getElementById('scorebar').classList.remove('hidden-ctrl');
+            document.getElementById('gameover-overlay').classList.add('hidden');
             updateControllerUI();
         }
     }
 }
 async function hostCreateOffer(){
+    if(hostPC&&hostPC.iceConnectionState!=='closed'&&hostPC.iceConnectionState!=='failed'){
+        console.warn('hostCreateOffer: Overwriting existing pending hostPC');
+    }
     const pc=new RTCPeerConnection(STUN_CONFIG);
     const dc=pc.createDataChannel('game');
     hostPC=pc;hostDC=dc;
+    pc.oniceconnectionstatechange=()=>{
+        console.log('HOST ICE state:',pc.iceConnectionState);
+        switch(pc.iceConnectionState){
+            case 'new':case 'checking':setIceStatus('\u{1F7E1} Checking connection...','#FFBB00');break;
+            case 'connected':setIceStatus('\u{1F7E2} ICE Connected!','#00FF88');break;
+            case 'failed':setIceStatus('\u{1F534} ICE Failed - may need TURN server','#FF4444');setConnectionStatus('ICE connection failed.');break;
+            case 'disconnected':setIceStatus('\u{1F7E0} Disconnected - trying to reconnect...','#FFBB00');break;
+            case 'closed':setIceStatus('\u{26AA} Connection closed','#8888AA');break;
+        }
+    };
+    pc.onicecandidateerror=(e)=>{
+        console.warn('HOST ICE candidate error:',e);
+        setIceStatus('\u{26A0} ICE candidate error','#FFBB00');
+    };
     setupHostDataChannel(dc);
     const sdp=await new Promise((resolve,reject)=>{
         let gatheringDone=false;
         pc.onicegatheringstatechange=()=>{
+            console.log('HOST ICE gathering:',pc.iceGatheringState);
+            if(pc.iceGatheringState==='gathering'){
+                setIceStatus('\u{1F50D} Gathering network candidates...','#FFBB00');
+            }
             if(pc.iceGatheringState==='complete'&&!gatheringDone){
                 gatheringDone=true;
+                setIceStatus('\u{2705} Candidates gathered, code ready','#00FF88');
                 resolve(pc.localDescription.sdp);
             }
         };
         pc.createOffer().then(offer=>pc.setLocalDescription(offer)).catch(err=>reject(err));
-        setTimeout(()=>{if(!gatheringDone){gatheringDone=true;resolve(pc.localDescription.sdp);}},5000);
+        setTimeout(()=>{if(!gatheringDone){gatheringDone=true;console.warn('HOST ICE gathering timed out after 15s');resolve(pc.localDescription.sdp);}},15000);
     });
     return sdp;
 }
@@ -632,11 +700,30 @@ async function clientJoin(offerSdp){
         clientDC.onclose=()=>{setStatusMsg('Disconnected from host',300);cleanupClient();appState=AppState.MENU;showMenu();updateControllerUI();};
         if(clientDC.readyState==='open'){netRole=NetRole.CLIENT;setConnectionStatus('Connected to host!');updateLobbyUI();updateControllerUI();}
     };
+    pc.oniceconnectionstatechange=()=>{
+        console.log('CLIENT ICE state:',pc.iceConnectionState);
+        switch(pc.iceConnectionState){
+            case 'new':case 'checking':setIceStatus('\u{1F7E1} Checking connection...','#FFBB00');break;
+            case 'connected':setIceStatus('\u{1F7E2} ICE Connected!','#00FF88');break;
+            case 'failed':setIceStatus('\u{1F534} ICE Failed - may need TURN server','#FF4444');setConnectionStatus('ICE connection failed.');break;
+            case 'disconnected':setIceStatus('\u{1F7E0} Disconnected - trying to reconnect...','#FFBB00');break;
+            case 'closed':setIceStatus('\u{26AA} Connection closed','#8888AA');break;
+        }
+    };
+    pc.onicecandidateerror=(e)=>{
+        console.warn('CLIENT ICE candidate error:',e);
+        setIceStatus('\u{26A0} ICE candidate error','#FFBB00');
+    };
     const sdp=await new Promise((resolve,reject)=>{
         let gatheringDone=false;
         pc.onicegatheringstatechange=()=>{
+            console.log('CLIENT ICE gathering:',pc.iceGatheringState);
+            if(pc.iceGatheringState==='gathering'){
+                setIceStatus('\u{1F50D} Gathering network candidates...','#FFBB00');
+            }
             if(pc.iceGatheringState==='complete'&&!gatheringDone){
                 gatheringDone=true;
+                setIceStatus('\u{2705} Candidates gathered, code ready','#00FF88');
                 resolve(pc.localDescription.sdp);
             }
         };
@@ -644,7 +731,7 @@ async function clientJoin(offerSdp){
           .then(()=>pc.createAnswer())
           .then(answer=>pc.setLocalDescription(answer))
           .catch(err=>reject(err));
-        setTimeout(()=>{if(!gatheringDone){gatheringDone=true;resolve(pc.localDescription.sdp);}},3000);
+        setTimeout(()=>{if(!gatheringDone){gatheringDone=true;console.warn('CLIENT ICE gathering timed out after 15s');resolve(pc.localDescription.sdp);}},15000);
     });
     clientAnswerSDP=sdp;
     return {pc,sdp};
@@ -654,11 +741,13 @@ function cleanupHost(){
     clientChannels=[];
     if(hostPC){try{hostPC.close();}catch(e){}}hostPC=null;hostDC=null;netRole=NetRole.NONE;
     activePlayerCount=0;localPlayerId=-1;
+    clearIceStatus();
 }
 function cleanupClient(){
     if(clientDC){try{clientDC.close();}catch(e){}clientDC=null;}
     if(clientPC){try{clientPC.close();}catch(e){}clientPC=null;}
     netRole=NetRole.NONE;localPlayerId=-1;
+    clearIceStatus();
 }
 function cleanupAll(){cleanupHost();cleanupClient();}
 
@@ -668,11 +757,13 @@ function cleanupAll(){cleanupHost();cleanupClient();}
 function hideAllOverlays(){
     document.getElementById('menu-overlay').classList.add('hidden');
     document.getElementById('lobby-overlay').classList.add('hidden');
+    document.getElementById('gameover-overlay').classList.add('hidden');
 }
 function showMenu(){
     hideAllOverlays();
     document.getElementById('menu-overlay').classList.remove('hidden');
     document.getElementById('controller-area').classList.add('hidden-ctrl');
+    document.getElementById('scorebar').classList.add('hidden-ctrl');
     appState=AppState.MENU;
 }
 let statusMsgTimeout=null;
@@ -690,6 +781,17 @@ function setConnectionStatus(msg){
     const el2=document.getElementById('sdp-receive-status');
     if(el1)el1.textContent=msg;
     if(el2)el2.textContent=msg;
+}
+function setIceStatus(msg,color){
+    const el=document.getElementById('ice-status');
+    if(!el)return;
+    el.textContent=msg;
+    el.style.color=color||'#8888AA';
+    el.style.background=color?(color==='#FF4444'?'rgba(255,68,68,0.1)':color==='#00FF88'?'rgba(0,255,136,0.08)':color==='#FFBB00'?'rgba(255,187,0,0.08)':'transparent'):'transparent';
+}
+function clearIceStatus(){
+    const el=document.getElementById('ice-status');
+    if(el){el.textContent='';el.style.color='';el.style.background='';}
 }
 
 // ============================================================
@@ -759,6 +861,7 @@ async function createGame(){
     hideAllOverlays();
     document.getElementById('lobby-overlay').classList.remove('hidden');
     document.getElementById('controller-area').classList.remove('hidden-ctrl');
+    document.getElementById('scorebar').classList.remove('hidden-ctrl');
     updateLobbyUI();
     updateControllerUI();
     try{
@@ -808,6 +911,7 @@ async function hostCopyInvite(){
         document.getElementById('btn-invite').textContent='Copy Invite Link';
     }
 }
+let hostConnectionTimer=null;
 async function submitPastedSDP(){
     const pasted=document.getElementById('sdp-paste-area').value.trim();
     if(!pasted){setConnectionStatus('Please paste a valid code.');return;}
@@ -816,7 +920,14 @@ async function submitPastedSDP(){
         const sdp=decodeSDP(pasted);
         if(!hostPC){setConnectionStatus('No pending connection. Please generate a new invite.');return;}
         await hostPC.setRemoteDescription({type:'answer',sdp:sdp});
-        setConnectionStatus('Connected!');
+        setConnectionStatus('Establishing connection...');
+        if(hostConnectionTimer)clearTimeout(hostConnectionTimer);
+        hostConnectionTimer=setTimeout(()=>{
+            if(appState===AppState.LOBBY&&netRole===NetRole.HOST&&(!hostDC||hostDC.readyState!=='open')){
+                setConnectionStatus('Connection timed out (30s). The friend may be behind a strict firewall. Try again or consider using a VPN.');
+                console.error('Host connection timed out - data channel never opened');
+            }
+        },30000);
     }catch(e){
         console.error('Failed to connect:',e);
         setConnectionStatus('Connection failed. The code might be invalid. Try again.');
@@ -830,10 +941,12 @@ function resetInviteUI(){
     document.getElementById('code-ready-banner').classList.add('hidden');
     document.getElementById('btn-invite').disabled=false;
     document.getElementById('btn-invite').textContent='Copy Invite Link';
+    clearIceStatus();
     updateControllerUI();
 }
 function cancelConnection(){
     if(hostPC){try{hostPC.close();}catch(e){}hostPC=null;hostDC=null;}
+    clearIceStatus();
     resetInviteUI();
     setConnectionStatus('');
 }
@@ -853,6 +966,7 @@ function showJoinUI(){
     document.getElementById('menu-overlay').classList.add('hidden');
     document.getElementById('lobby-overlay').classList.remove('hidden');
     document.getElementById('controller-area').classList.remove('hidden-ctrl');
+    document.getElementById('scorebar').classList.remove('hidden-ctrl');
     document.getElementById('host-ip-info').textContent='';
     document.getElementById('host-invite-row').style.display='none';
     document.getElementById('lobby-wait-msg').textContent='';
@@ -863,6 +977,7 @@ function showJoinUI(){
     document.getElementById('sdp-paste-area').value='';
     document.getElementById('sdp-paste-area').placeholder='Paste the invite code...';
     document.getElementById('sdp-receive-status').textContent='';
+    clearIceStatus();
     const submitBtn=document.querySelector('#sdp-receive .btn-row button:first-child');
     submitBtn.textContent='Join Game';
     submitBtn.onclick=clientSubmitOffer;
@@ -904,6 +1019,7 @@ function cancelJoin(){
     document.getElementById('lobby-overlay').classList.add('hidden');
     document.getElementById('menu-overlay').classList.remove('hidden');
     document.getElementById('controller-area').classList.add('hidden-ctrl');
+    document.getElementById('scorebar').classList.add('hidden-ctrl');
     appState=AppState.MENU;
 }
 function showHelp(){setStatusMsg('Last snake alive wins! Eat food (+10) to grow. Use D-Pad/WASD/Arrows to move.',300);}
@@ -941,6 +1057,61 @@ function updateLobbyUI(){
 }
 
 // ============================================================
+// IN-GAME HTML UI UPDATES (replaces canvas text rendering)
+// ============================================================
+function updateScoreBar(){
+    if(appState!==AppState.PLAYING)return;
+    const listEl=document.getElementById('score-player-list');
+    let html='';
+    for(let i=0;i<MAX_PLAYERS;i++){
+        if(!gameState.players[i].active)continue;
+        const color=COLORS.PLAYER[i];
+        const you=(i===localPlayerId)?' (YOU)':'';
+        html+='<div class="score-player-entry">';
+        html+='<span class="score-player-name" style="color:'+color+'">P'+(i+1)+you+'</span>';
+        html+='<span class="score-player-score" style="color:'+color+'">'+gameState.players[i].score+'</span>';
+        if(!gameState.players[i].alive&&!gameState.gameOver){
+            html+='<span class="score-player-dead">DEAD</span>';
+        }
+        html+='</div>';
+    }
+    listEl.innerHTML=html;
+
+    const hintEl=document.getElementById('score-hint');
+    if(gameState.gameOver){
+        if(netRole===NetRole.HOST){
+            hintEl.textContent='RESTART: R key / Tap button';
+        }else{
+            hintEl.textContent='Waiting for host to restart...';
+        }
+    }else{
+        hintEl.textContent='D-Pad: Move  |  Quit: Back / X key';
+    }
+}
+
+function updateGameOverOverlay(){
+    const overlay=document.getElementById('gameover-overlay');
+    if(appState===AppState.PLAYING&&gameState.gameOver){
+        overlay.classList.remove('hidden');
+        let wid=-1,ms=-1;
+        for(let i=0;i<MAX_PLAYERS;i++){
+            if(gameState.players[i].active&&gameState.players[i].alive){wid=i;break;}
+            if(gameState.players[i].active&&gameState.players[i].score>ms){ms=gameState.players[i].score;wid=i;}
+        }
+        const winnerEl=document.getElementById('gameover-winner');
+        if(wid>=0){
+            winnerEl.textContent='Player '+(wid+1)+' Wins!';
+            winnerEl.style.color=COLORS.PLAYER[wid];
+        }else{
+            winnerEl.textContent='Draw!';
+            winnerEl.style.color='#CCCCCC';
+        }
+    }else{
+        overlay.classList.add('hidden');
+    }
+}
+
+// ============================================================
 // RENDERING
 // ============================================================
 function renderMenu(){fillRect(0,0,WIN_W,WIN_H,'#0D0D1A');}
@@ -970,35 +1141,13 @@ function renderGame(){
             }else drawCell(seg.x,seg.y,COLORS.BODY[p]);
         }
     }
-    if(gameState.gameOver){
-        fillRect(0,0,BUFFER_W,BUFFER_H,'rgba(0,0,0,0.53)');
-        drawCentered('GAME OVER',BUFFER_H/2-CHAR_PX*CHAR_H/2,'#FF4444');
-        let wid=-1,ms=-1;
-        for(let i=0;i<MAX_PLAYERS;i++){
-            if(gameState.players[i].active&&gameState.players[i].alive){wid=i;break;}
-            if(gameState.players[i].active&&gameState.players[i].score>ms){ms=gameState.players[i].score;wid=i;}
-        }
-        if(wid>=0)drawCentered('P'+(wid+1)+' Wins!',BUFFER_H/2+CHAR_PX*CHAR_H+4,COLORS.PLAYER[wid]);
-    }
-    fillRect(0,BUFFER_H,WIN_W,SCORE_H,'#1A1A2E');
-    for(let i=0;i<MAX_PLAYERS;i++){
-        if(!gameState.players[i].active)continue;
-        const x=Math.max(4,WIN_W/MAX_PLAYERS*i+4);
-        let s='P'+(i+1)+':'+gameState.players[i].score;
-        if(i===localPlayerId)s+='(YOU)';
-        drawText(s,x,BUFFER_H+CHAR_PX*2,COLORS.PLAYER[i]);
-        if(!gameState.players[i].alive&&!gameState.gameOver)drawText('DEAD',x,BUFFER_H+CHAR_PX*(CHAR_H+3),'#FF4444');
-    }
-    const hintY=BUFFER_H+SCORE_H-CHAR_PX*CHAR_H-2;
-    drawText('D-Pad:Move  Quit:Back',4,hintY,'#8888AA');
-    if(netRole===NetRole.HOST&&gameState.gameOver)drawText('RESTART:R/Tap',4,hintY-CHAR_PX*(CHAR_H+1)-2,'#CCCCCC');
 }
 function renderDispatch(){
     ctx.clearRect(0,0,WIN_W,WIN_H);
     switch(appState){
         case AppState.MENU:renderMenu();break;
         case AppState.LOBBY:renderLobby();break;
-        case AppState.PLAYING:renderGame();break;
+        case AppState.PLAYING:renderGame();updateScoreBar();updateGameOverOverlay();break;
     }
 }
 
