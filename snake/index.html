@@ -2,171 +2,255 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>Snake - 4P Multiplayer</title>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
+html, body {
+    width:100%; height:100%;
+    overflow:hidden;
+    touch-action: manipulation;
+    -webkit-user-select:none; user-select:none;
+    -webkit-tap-highlight-color:transparent;
+    -webkit-touch-callout:none;
+}
 body {
     background:#0D0D1A;
-    display:flex; justify-content:center; align-items:center; min-height:100vh;
-    font-family:monospace; overflow:hidden;
+    font-family:monospace;
+    display:flex; justify-content:center; align-items:center;
+}
+#app-container {
+    display:flex; flex-direction:column;
+    width:100%; max-width:600px;
+    height:100vh; height:100dvh;
 }
 #game-container {
-    position:relative;
-    width:800px; height:500px;
-    border:2px solid #00FF88;
-    border-radius:4px;
-    box-shadow:0 0 30px rgba(0,255,136,0.15);
-}
-#gameCanvas {
-    display:block;
+    position:relative; flex:0 0 auto;
+    display:flex; justify-content:center; align-items:center;
     background:#0D0D1A;
-    cursor:default;
 }
+#gameCanvas { display:block; background:#0D0D1A; }
+
 .overlay {
     position:absolute; top:0; left:0;
     width:100%; height:100%;
     display:flex; flex-direction:column;
     align-items:center; justify-content:center;
-    pointer-events:none;
+    pointer-events:none; z-index:10;
 }
 .overlay > * { pointer-events:auto; }
 .hidden { display:none !important; }
+.hidden-ctrl { display:none !important; }
+
 .menu-btn {
     background:#1A1A2E; color:#CCCCCC; border:1px solid #00FF88;
-    padding:10px 30px; font-family:monospace; font-size:16px;
-    cursor:pointer; margin:6px; transition:all 0.15s;
-    border-radius:3px; min-width:220px;
+    padding:10px 16px; font-family:monospace; font-size:clamp(12px,3vw,16px);
+    cursor:pointer; margin:4px; transition:all 0.15s;
+    border-radius:6px; min-width:200px; max-width:88vw;
+    -webkit-tap-highlight-color:transparent;
 }
-.menu-btn:hover { background:#00FF88; color:#0D0D1A; border-color:#00FF88; }
-.menu-btn:active { transform:scale(0.97); }
+.menu-btn:hover { background:#00FF88; color:#0D0D1A; }
+.menu-btn:active { transform:scale(0.97); background:#00FF88; color:#0D0D1A; }
+
 .title-text {
-    color:#00FF88; font-size:42px; font-weight:bold;
-    letter-spacing:12px; margin-bottom:8px; text-shadow:0 0 20px rgba(0,255,136,0.4);
+    color:#00FF88; font-size:clamp(24px,8vw,42px); font-weight:bold;
+    letter-spacing:clamp(6px,2vw,12px); margin-bottom:4px;
+    text-shadow:0 0 20px rgba(0,255,136,0.4);
 }
-.subtitle { color:#8888AA; font-size:14px; margin-bottom:30px; }
-.hint-text { color:#8888AA; font-size:12px; margin-top:15px; }
+.subtitle { color:#8888AA; font-size:clamp(10px,2.5vw,14px); margin-bottom:20px; text-align:center; padding:0 10px; }
+.hint-text { color:#8888AA; font-size:clamp(10px,2.2vw,12px); margin-top:10px; text-align:center; padding:0 10px; }
+
 .connect-area {
     background:#1A1A2E; border:1px solid #44BBFF; border-radius:4px;
-    padding:20px; width:680px; max-width:95%;
-    margin:8px 0;
+    padding:12px; width:min(500px,92vw); margin:6px 0;
 }
-.connect-area label {
-    display:block; color:#CCCCCC; font-size:13px; margin-bottom:5px;
-}
+.connect-area label { display:block; color:#CCCCCC; font-size:clamp(11px,2.2vw,13px); margin-bottom:4px; }
 .connect-area textarea {
-    width:100%; height:100px; background:#0D0D1A; color:#00FF88;
-    border:1px solid #333; font-family:monospace; font-size:11px;
-    padding:8px; resize:vertical; outline:none; border-radius:2px;
+    width:100%; height:80px; background:#0D0D1A; color:#00FF88;
+    border:1px solid #333; font-family:monospace; font-size:clamp(10px,2vw,12px);
+    padding:6px; resize:vertical; outline:none; border-radius:2px;
 }
 .connect-area textarea:focus { border-color:#00FF88; }
-.connect-area .btn-row {
-    display:flex; gap:10px; margin-top:10px; justify-content:center;
-}
+.connect-area .btn-row { display:flex; gap:8px; margin-top:8px; justify-content:center; flex-wrap:wrap; }
 .connect-area .a-btn {
     background:#16213E; color:#CCCCCC; border:1px solid #44BBFF;
-    padding:8px 20px; font-family:monospace; font-size:13px;
-    cursor:pointer; border-radius:3px; transition:all 0.15s;
+    padding:8px 14px; font-family:monospace; font-size:clamp(11px,2.2vw,13px);
+    cursor:pointer; border-radius:4px; transition:all 0.15s;
+    -webkit-tap-highlight-color:transparent;
 }
 .connect-area .a-btn:hover { background:#44BBFF; color:#0D0D1A; }
+.connect-area .a-btn:active { background:#44BBFF; color:#0D0D1A; }
 .connect-area .status-text {
-    color:#8888AA; font-size:12px; margin-top:8px; text-align:center; min-height:18px;
+    color:#8888AA; font-size:clamp(10px,2vw,12px); margin-top:6px; text-align:center; min-height:16px;
 }
-.connected-dot {
-    display:inline-block; width:10px; height:10px; border-radius:50%;
-    margin-right:6px; vertical-align:middle;
-}
-.player-list { margin:6px 0; color:#CCCCCC; font-size:13px; }
-.player-list .p-entry { margin:3px 0; }
-.lobby-info {
-    color:#CCCCCC; font-size:14px; text-align:center; margin:4px 0;
-}
+.connected-dot { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:6px; vertical-align:middle; }
+.player-list { margin:4px 0; color:#CCCCCC; font-size:clamp(11px,2.2vw,13px); }
+.player-list .p-entry { margin:2px 0; }
+.lobby-info { color:#CCCCCC; font-size:clamp(12px,2.5vw,14px); text-align:center; margin:3px 0; }
 .lobby-info .highlight { color:#00FF88; }
 .status-msg {
-    color:#FF4444; font-size:13px; text-align:center; margin-top:5px;
-    min-height:20px;
+    color:#FF4444; font-size:clamp(11px,2.2vw,13px); text-align:center; margin-top:4px; min-height:18px;
 }
+.code-ready-msg {
+    color:#FFBB00; font-size:clamp(16px,4vw,24px); font-weight:bold; text-align:center;
+    margin-bottom:8px; letter-spacing:2px;
+    text-shadow:0 0 15px rgba(255,187,0,0.5);
+    animation:codePulse 1.5s ease-in-out infinite;
+}
+@keyframes codePulse { 0%,100% { opacity:1; } 50% { opacity:0.6; } }
+
+/* CONTROLLER */
+#controller-area {
+    flex:1; display:flex; flex-direction:column;
+    justify-content:center; align-items:center;
+    min-height:180px;
+    background:#0A0A16;
+    border-top:2px solid #00FF88;
+    padding:8px;
+}
+#dpad {
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    grid-template-rows:repeat(3,1fr);
+    gap:6px;
+    width:min(210px,55vw);
+    height:min(210px,55vw);
+}
+.dpad-btn {
+    background:#1A1A2E; border:2px solid #00FF88; border-radius:14px;
+    color:#00FF88; font-size:min(28px,7vw);
+    cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    -webkit-tap-highlight-color:transparent;
+    touch-action:manipulation;
+    transition:background 0.08s,transform 0.08s;
+    -webkit-user-select:none; user-select:none;
+}
+.dpad-btn:active, .dpad-btn.pressed {
+    background:#00FF88; color:#0D0D1A; transform:scale(0.92);
+}
+#btn-up    { grid-column:2; grid-row:1; }
+#btn-left  { grid-column:1; grid-row:2; }
+#btn-right { grid-column:3; grid-row:2; }
+#btn-down  { grid-column:2; grid-row:3; }
+#dpad-center { grid-column:2; grid-row:2; background:transparent; border:none; pointer-events:none; }
+
+#action-row {
+    display:flex; gap:10px; margin-top:10px; flex-wrap:wrap; justify-content:center;
+}
+.action-btn {
+    background:#1A1A2E; border:1px solid #44BBFF; color:#CCCCCC;
+    padding:10px 16px; font-family:monospace; font-size:clamp(12px,3vw,14px);
+    border-radius:8px; cursor:pointer;
+    -webkit-tap-highlight-color:transparent;
+    touch-action:manipulation; min-width:70px;
+    transition:all 0.12s;
+    -webkit-user-select:none; user-select:none;
+}
+.action-btn:active { background:#44BBFF; color:#0D0D1A; transform:scale(0.94); }
+.hidden-btn { display:none !important; }
 </style>
 </head>
 <body>
-<div id="game-container">
-    <canvas id="gameCanvas" width="800" height="500"></canvas>
+<div id="app-container">
 
-    <!-- ====== MENU OVERLAY ====== -->
-    <div id="menu-overlay" class="overlay">
-        <div class="title-text">SNAKE</div>
-        <div class="subtitle">4 PLAYER MULTIPLAYER (port 8888)</div>
-        <button class="menu-btn" onclick="createGame()">1 - CREATE GAME (HOST)</button>
-        <button class="menu-btn" onclick="showJoinUI()">2 - JOIN GAME</button>
-        <button class="menu-btn" onclick="showHelp()">3 - HOW TO PLAY</button>
-        <div id="menu-status" class="status-msg"></div>
-        <div class="hint-text">WASD/Arrows: Move &nbsp;&nbsp; ESC: Back</div>
-    </div>
+    <div id="game-container">
+        <canvas id="gameCanvas"></canvas>
 
-    <!-- ====== LOBBY OVERLAY ====== -->
-    <div id="lobby-overlay" class="overlay hidden">
-        <div id="lobby-title" style="color:#00FF88;font-size:28px;font-weight:bold;letter-spacing:6px;margin-bottom:6px;">LOBBY</div>
-        <div class="lobby-info">Connected: <span id="player-count" class="highlight">0</span>/4</div>
-        <div id="host-ip-info" style="color:#8888AA;font-size:12px;margin-bottom:6px;"></div>
-        <div id="player-list" class="player-list"></div>
-
-        <div id="connect-panel" style="width:680px;max-width:95%;margin:6px 0;">
-            <!-- Host: invite button -->
-            <div id="host-invite-row" style="text-align:center;margin:8px 0;">
-                <button class="a-btn" onclick="hostCopyInvite()" id="btn-invite">Copy Invite Link</button>
-            </div>
-
-            <!-- Connection exchange area (textarea for copy/paste) -->
-            <div id="sdp-exchange" class="hidden connect-area" style="margin:0 auto;">
-                <div id="sdp-step-label" style="color:#CCCCCC;font-size:13px;margin-bottom:5px;"></div>
-                <textarea id="sdp-textarea" readonly></textarea>
-                <div class="btn-row">
-                    <button class="a-btn" id="sdp-copy-btn" onclick="copySDP()">Copy Code</button>
-                    <button class="a-btn" id="sdp-next-btn" style="display:none;">Next Step...</button>
-                </div>
-                <div id="sdp-status" class="status-text"></div>
-            </div>
-
-            <!-- Paste area for receiving SDP -->
-            <div id="sdp-receive" class="hidden connect-area" style="margin:0 auto;">
-                <label id="sdp-receive-label">Paste the code you received here:</label>
-                <textarea id="sdp-paste-area" placeholder="Paste the code here..."></textarea>
-                <div class="btn-row">
-                    <button class="a-btn" onclick="submitPastedSDP()">Submit</button>
-                    <button class="a-btn" onclick="cancelConnection()">Cancel</button>
-                </div>
-                <div id="sdp-receive-status" class="status-text"></div>
-            </div>
+        <!-- MENU OVERLAY -->
+        <div id="menu-overlay" class="overlay">
+            <div class="title-text">SNAKE</div>
+            <div class="subtitle">4 PLAYER MULTIPLAYER (port 8888)</div>
+            <button class="menu-btn" onclick="createGame()">1 - CREATE GAME (HOST)</button>
+            <button class="menu-btn" onclick="showJoinUI()">2 - JOIN GAME</button>
+            <button class="menu-btn" onclick="showHelp()">3 - HOW TO PLAY</button>
+            <div id="menu-status" class="status-msg"></div>
+            <div class="hint-text">Use D-Pad / WASD / Arrows to move</div>
         </div>
 
-        <div id="lobby-wait-msg" style="color:#8888AA;font-size:13px;margin:6px 0;"></div>
-        <div id="start-hint" class="hidden" style="color:#00FF88;font-size:14px;margin:6px 0;">Press SPACE to start the game!</div>
-        <div class="hint-text">ESC: Back to menu</div>
+        <!-- LOBBY OVERLAY -->
+        <div id="lobby-overlay" class="overlay hidden">
+            <div id="lobby-title" style="color:#00FF88;font-size:clamp(20px,5vw,28px);font-weight:bold;letter-spacing:4px;margin-bottom:4px;">LOBBY</div>
+            <div class="lobby-info">Connected: <span id="player-count" class="highlight">0</span>/4</div>
+            <div id="host-ip-info" style="color:#8888AA;font-size:clamp(10px,2vw,12px);margin-bottom:4px;"></div>
+            <div id="player-list" class="player-list"></div>
+            <div id="connect-panel" style="width:min(500px,92vw);margin:4px 0;">
+                <div id="host-invite-row" style="text-align:center;margin:6px 0;">
+                    <button class="a-btn" onclick="hostCopyInvite()" id="btn-invite">Copy Invite Link</button>
+                </div>
+                <div id="sdp-exchange" class="hidden connect-area" style="margin:0 auto;">
+                    <div id="code-ready-banner" class="code-ready-msg hidden">✅ RESPONSE CODE GENERATED!</div>
+                    <div id="sdp-step-label" style="color:#CCCCCC;font-size:clamp(11px,2.2vw,13px);margin-bottom:4px;"></div>
+                    <textarea id="sdp-textarea" readonly></textarea>
+                    <div class="btn-row">
+                        <button class="a-btn" id="sdp-copy-btn" onclick="copySDP()">Copy Code</button>
+                        <button class="a-btn" id="sdp-next-btn" style="display:none;">Next Step...</button>
+                    </div>
+                    <div id="sdp-status" class="status-text"></div>
+                </div>
+                <div id="sdp-receive" class="hidden connect-area" style="margin:0 auto;">
+                    <label id="sdp-receive-label">Paste the code you received here:</label>
+                    <textarea id="sdp-paste-area" placeholder="Paste the code here..."></textarea>
+                    <div class="btn-row">
+                        <button class="a-btn" onclick="submitPastedSDP()">Submit</button>
+                        <button class="a-btn" onclick="cancelConnection()">Cancel</button>
+                    </div>
+                    <div id="sdp-receive-status" class="status-text"></div>
+                </div>
+            </div>
+            <div id="lobby-wait-msg" style="color:#8888AA;font-size:clamp(11px,2.2vw,13px);margin:4px 0;"></div>
+            <div id="start-hint" class="hidden" style="color:#00FF88;font-size:clamp(12px,2.5vw,14px);margin:4px 0;">Tap START or press SPACE to begin!</div>
+            <div class="hint-text">QUIT: Back to menu</div>
+        </div>
     </div>
+
+    <!-- CONTROLLER -->
+    <div id="controller-area" class="hidden-ctrl">
+        <div id="dpad">
+            <button class="dpad-btn" id="btn-up"    data-dir="1">▲</button>
+            <button class="dpad-btn" id="btn-left"  data-dir="3">◄</button>
+            <div id="dpad-center"></div>
+            <button class="dpad-btn" id="btn-right" data-dir="4">►</button>
+            <button class="dpad-btn" id="btn-down"  data-dir="2">▼</button>
+        </div>
+        <div id="action-row">
+            <button class="action-btn hidden-btn" id="btn-start-game">START</button>
+            <button class="action-btn hidden-btn" id="btn-restart-game">RESTART</button>
+            <button class="action-btn hidden-btn" id="btn-quit-game">QUIT</button>
+        </div>
+    </div>
+
 </div>
 
 <script>
 // ============================================================
 // CONSTANTS
 // ============================================================
-const GRID_W = 40, GRID_H = 20, CELL_SIZE = 20;
-const BUFFER_W = GRID_W * CELL_SIZE;
-const BUFFER_H = GRID_H * CELL_SIZE;
-const WIN_W = BUFFER_W;
-const WIN_H = BUFFER_H + 100;
+const GRID_W = 40, GRID_H = 20;
 const MAX_PLAYERS = 4;
 const TICK_RATE = 10.0;
 const TARGET_FRAME = 1000 / 60;
 
 // ============================================================
+// DYNAMIC SIZING
+// ============================================================
+let CELL_SIZE = 20;
+let BUFFER_W = GRID_W * CELL_SIZE;
+let BUFFER_H = GRID_H * CELL_SIZE;
+let SCORE_H = 60;
+let WIN_W = BUFFER_W;
+let WIN_H = BUFFER_H + SCORE_H;
+let CHAR_PX = 2;
+
+// ============================================================
 // COLORS
 // ============================================================
 const COLORS = {
-    BG: '#1A1A2E', GRID: '#16213E', WALL: '#E94560', FOOD: '#FF4444',
-    SCORE: '#CCCCCC', EYE: '#FFFFFF', OVERLAY: 'rgba(0,0,0,0.53)',
-    MENU_BG: '#0D0D1A', TITLE: '#00FF88', HINT: '#8888AA', RED: '#FF4444',
-    PLAYER: ['#00FF88', '#44BBFF', '#FFBB00', '#FF66BB'],
-    BODY: ['#00CC66', '#3399DD', '#DD9900', '#DD4499']
+    BG:'#1A1A2E',GRID:'#16213E',WALL:'#E94560',FOOD:'#FF4444',
+    SCORE:'#CCCCCC',EYE:'#FFFFFF',OVERLAY:'rgba(0,0,0,0.53)',
+    MENU_BG:'#0D0D1A',TITLE:'#00FF88',HINT:'#8888AA',RED:'#FF4444',
+    PLAYER:['#00FF88','#44BBFF','#FFBB00','#FF66BB'],
+    BODY:['#00CC66','#3399DD','#DD9900','#DD4499']
 };
 
 // ============================================================
@@ -216,803 +300,877 @@ const EXTRA_GLYPHS = [
     [0b00000,0b00100,0b00100,0b00000,0b00100,0b00100,0b00000],
     [0b00000,0b00000,0b00000,0b00000,0b00000,0b00000,0b00000]
 ];
-const CHAR_W = 5, CHAR_H = 7;
+const CHAR_W=5,CHAR_H=7;
 
 // ============================================================
 // ENUMS
 // ============================================================
-const Direction = { STOP:0, UP:1, DOWN:2, LEFT:3, RIGHT:4 };
-const AppState = { MENU:0, LOBBY:1, PLAYING:2 };
-const NetRole = { NONE:0, HOST:1, CLIENT:2 };
-const PacketType = { JOIN_ACCEPT:0, PLAYER_INPUT:1, GAME_STATE:2 };
+const Direction={STOP:0,UP:1,DOWN:2,LEFT:3,RIGHT:4};
+const AppState={MENU:0,LOBBY:1,PLAYING:2};
+const NetRole={NONE:0,HOST:1,CLIENT:2};
+const PacketType={JOIN_ACCEPT:0,PLAYER_INPUT:1,GAME_STATE:2};
 
 // ============================================================
 // CANVAS SETUP
 // ============================================================
-const canvas = document.getElementById('gameCanvas');
-const ctx = canvas.getContext('2d');
-canvas.width = WIN_W;
-canvas.height = WIN_H;
+const canvas=document.getElementById('gameCanvas');
+const ctx=canvas.getContext('2d');
+
+function resizeGame(){
+    const pad=16;
+    const maxW=window.innerWidth-pad;
+    const maxH=window.innerHeight*0.55;
+    let cs=Math.floor(maxW/GRID_W);
+    cs=Math.max(8,cs);
+    const tSH=Math.max(36,cs*3);
+    let totH=GRID_H*cs+tSH;
+    if(totH>maxH){
+        cs=Math.floor((maxH-Math.max(36,Math.floor(maxH*0.15)))/GRID_H);
+        cs=Math.max(8,cs);
+    }
+    CELL_SIZE=cs;
+    BUFFER_W=GRID_W*CELL_SIZE;
+    BUFFER_H=GRID_H*CELL_SIZE;
+    SCORE_H=Math.max(36,Math.floor(CELL_SIZE*3));
+    WIN_W=BUFFER_W;
+    WIN_H=BUFFER_H+SCORE_H;
+    CHAR_PX=Math.max(1,Math.round(CELL_SIZE/10));
+    canvas.width=WIN_W;
+    canvas.height=WIN_H;
+    document.getElementById('game-container').style.height=WIN_H+'px';
+}
 
 // ============================================================
 // GAME STATE
 // ============================================================
-let gameState = { food:{x:0,y:0}, gameOver:false, aliveCount:0, players:[] };
-for (let i = 0; i < MAX_PLAYERS; i++) {
-    gameState.players.push({ body:[], dir:Direction.RIGHT, score:0, alive:false, active:false, nextDir:Direction.STOP });
+let gameState={food:{x:0,y:0},gameOver:false,aliveCount:0,players:[]};
+for(let i=0;i<MAX_PLAYERS;i++){
+    gameState.players.push({body:[],dir:Direction.RIGHT,score:0,alive:false,active:false,nextDir:Direction.STOP});
 }
-
-let appState = AppState.MENU;
-let netRole = NetRole.NONE;
-let localPlayerId = -1;
-let activePlayerCount = 0;
+let appState=AppState.MENU;
+let netRole=NetRole.NONE;
+let localPlayerId=-1;
+let activePlayerCount=0;
 
 // ============================================================
 // WEBRTC STATE
 // ============================================================
-const STUN_CONFIG = { 'iceServers': [{ 'urls': 'stun:stun.l.google.com:19302' }] };
-let hostPC = null;
-let hostDC = null;
-let clientPC = null;
-let clientDC = null;
-let clientChannels = [];
-let sdpBuffer = '';
-let clientAnswerSDP = null;
+const STUN_CONFIG={'iceServers':[{'urls':'stun:stun.l.google.com:19302'}]};
+let hostPC=null,hostDC=null,clientPC=null,clientDC=null;
+let clientChannels=[];
+let sdpBuffer='';
+let clientAnswerSDP=null;
 
 // ============================================================
 // DRAWING HELPERS
 // ============================================================
-function fillRect(x, y, w, h, hex) { ctx.fillStyle = hex; ctx.fillRect(x, y, w, h); }
-function drawCell(gx, gy, hex) { const px = gx * CELL_SIZE, py = gy * CELL_SIZE; fillRect(px + 1, py + 1, CELL_SIZE - 2, CELL_SIZE - 2, hex); }
-
-function drawChar(x, y, c, hex) {
-    ctx.fillStyle = hex;
-    let g = null;
-    if (c >= '0' && c <= '9') g = DIGIT_GLYPHS[c.charCodeAt(0) - 48];
-    else if (c >= 'A' && c <= 'Z') g = LETTER_GLYPHS[c.charCodeAt(0) - 65];
-    else if (c >= 'a' && c <= 'z') g = LETTER_GLYPHS[c.charCodeAt(0) - 97];
-    else if (c === ':') g = EXTRA_GLYPHS[0];
-    else if (c === ' ' || c === '.') { if (c === '.') { ctx.fillRect(x + 2, y + 5, 2, 2); } return; }
-    if (!g) return;
-    for (let row = 0; row < CHAR_H; row++) {
-        for (let col = 0; col < CHAR_W; col++) {
-            if (g[row] & (0b10000 >> col)) ctx.fillRect(x + col, y + row, 2, 2);
+function fillRect(x,y,w,h,hex){ctx.fillStyle=hex;ctx.fillRect(x,y,w,h);}
+function drawCell(gx,gy,hex){const px=gx*CELL_SIZE,py=gy*CELL_SIZE;fillRect(px+1,py+1,CELL_SIZE-2,CELL_SIZE-2,hex);}
+function drawChar(x,y,c,hex){
+    ctx.fillStyle=hex;
+    let g=null;
+    if(c>='0'&&c<='9')g=DIGIT_GLYPHS[c.charCodeAt(0)-48];
+    else if(c>='A'&&c<='Z')g=LETTER_GLYPHS[c.charCodeAt(0)-65];
+    else if(c>='a'&&c<='z')g=LETTER_GLYPHS[c.charCodeAt(0)-97];
+    else if(c===':')g=EXTRA_GLYPHS[0];
+    else if(c===' '||c==='.'){if(c==='.'){ctx.fillRect(x+CHAR_PX,y+CHAR_PX*2.5,CHAR_PX,CHAR_PX);}return;}
+    if(!g)return;
+    const px=CHAR_PX;
+    for(let row=0;row<CHAR_H;row++){
+        for(let col=0;col<CHAR_W;col++){
+            if(g[row]&(0b10000>>col))ctx.fillRect(x+col*px,y+row*px,px,px);
         }
     }
 }
-function drawText(t, x, y, hex) { let cx = x; for (const ch of t) { drawChar(cx, y, ch, hex); cx += CHAR_W + 1; } }
-function drawCentered(t, y, hex) { drawText(t, (WIN_W - t.length * (CHAR_W + 1)) / 2, y, hex); }
+function drawText(t,x,y,hex){
+    let cx=x;
+    const sp=(CHAR_W+1)*CHAR_PX/2;
+    for(const ch of t){drawChar(cx,y,ch,hex);cx+=sp;}
+}
+function drawCentered(t,y,hex){const sp=(CHAR_W+1)*CHAR_PX/2;drawText(t,(WIN_W-t.length*sp)/2,y,hex);}
 
 // ============================================================
 // GAME LOGIC
 // ============================================================
-function genFood() {
+function genFood(){
     let ok;
-    do {
-        ok = true;
-        gameState.food.x = 1 + Math.floor(Math.random() * (GRID_W - 2));
-        gameState.food.y = 1 + Math.floor(Math.random() * (GRID_H - 2));
-        for (let p = 0; p < MAX_PLAYERS; p++) {
-            if (!gameState.players[p].active) continue;
-            for (const seg of gameState.players[p].body) {
-                if (seg.x === gameState.food.x && seg.y === gameState.food.y) { ok = false; break; }
+    do{
+        ok=true;
+        gameState.food.x=1+Math.floor(Math.random()*(GRID_W-2));
+        gameState.food.y=1+Math.floor(Math.random()*(GRID_H-2));
+        for(let p=0;p<MAX_PLAYERS;p++){
+            if(!gameState.players[p].active)continue;
+            for(const seg of gameState.players[p].body){
+                if(seg.x===gameState.food.x&&seg.y===gameState.food.y){ok=false;break;}
             }
-            if (!ok) break;
+            if(!ok)break;
         }
-    } while (!ok);
+    }while(!ok);
 }
-
-function spawnPlayer(id) {
-    const p = gameState.players[id];
-    p.body = []; p.score = 0; p.alive = true; p.dir = Direction.RIGHT; p.nextDir = Direction.STOP;
-    const spawns = [{x:Math.floor(GRID_W/4),y:Math.floor(GRID_H/2)},{x:Math.floor(3*GRID_W/4),y:Math.floor(GRID_H/2)},{x:Math.floor(GRID_W/2),y:Math.floor(GRID_H/4)},{x:Math.floor(GRID_W/2),y:Math.floor(3*GRID_H/4)}];
-    const sx = spawns[id].x, sy = spawns[id].y;
+function spawnPlayer(id){
+    const p=gameState.players[id];
+    p.body=[];p.score=0;p.alive=true;p.dir=Direction.RIGHT;p.nextDir=Direction.STOP;
+    const spawns=[{x:Math.floor(GRID_W/4),y:Math.floor(GRID_H/2)},{x:Math.floor(3*GRID_W/4),y:Math.floor(GRID_H/2)},{x:Math.floor(GRID_W/2),y:Math.floor(GRID_H/4)},{x:Math.floor(GRID_W/2),y:Math.floor(3*GRID_H/4)}];
+    const sx=spawns[id].x,sy=spawns[id].y;
     p.body.push({x:sx,y:sy},{x:sx-1,y:sy},{x:sx-2,y:sy});
 }
-
-function resetAll() {
-    for (let i = 0; i < MAX_PLAYERS; i++) {
-        if (gameState.players[i].active) spawnPlayer(i);
-        else { gameState.players[i].body = []; gameState.players[i].alive = false; }
+function resetAll(){
+    for(let i=0;i<MAX_PLAYERS;i++){
+        if(gameState.players[i].active)spawnPlayer(i);
+        else{gameState.players[i].body=[];gameState.players[i].alive=false;}
     }
-    gameState.gameOver = false; genFood();
+    gameState.gameOver=false;genFood();
+    gameState.aliveCount=0;
+    for(const p of gameState.players)if(p.alive)gameState.aliveCount++;
 }
-
-function startMatch() {
-    resetAll(); gameState.aliveCount = 0;
-    for (const p of gameState.players) if (p.active) gameState.aliveCount++;
-    appState = AppState.PLAYING; hideAllOverlays();
+function startMatch(){
+    resetAll();gameState.aliveCount=0;
+    for(const p of gameState.players)if(p.active)gameState.aliveCount++;
+    appState=AppState.PLAYING;hideAllOverlays();
+    updateControllerUI();
 }
-
-function hostPrepare() {
-    for (let i = 0; i < MAX_PLAYERS; i++)
-        gameState.players[i] = { body:[], dir:Direction.RIGHT, score:0, alive:false, active:false, nextDir:Direction.STOP };
-    gameState.players[0].active = true; activePlayerCount = 1; localPlayerId = 0;
-    spawnPlayer(0); genFood(); appState = AppState.LOBBY;
+function hostPrepare(){
+    for(let i=0;i<MAX_PLAYERS;i++)
+        gameState.players[i]={body:[],dir:Direction.RIGHT,score:0,alive:false,active:false,nextDir:Direction.STOP};
+    gameState.players[0].active=true;activePlayerCount=1;localPlayerId=0;
+    spawnPlayer(0);genFood();appState=AppState.LOBBY;
 }
-
-function updatePlayer(id) {
-    const p = gameState.players[id];
-    if (!p.alive || p.body.length === 0) return;
-    let md = p.dir;
-    if (p.nextDir !== Direction.STOP) {
-        const opp = (p.dir === Direction.UP && p.nextDir === Direction.DOWN) ||
-                    (p.dir === Direction.DOWN && p.nextDir === Direction.UP) ||
-                    (p.dir === Direction.LEFT && p.nextDir === Direction.RIGHT) ||
-                    (p.dir === Direction.RIGHT && p.nextDir === Direction.LEFT);
-        if (!opp) md = p.nextDir;
-        p.dir = md; p.nextDir = Direction.STOP;
+function updatePlayer(id){
+    const p=gameState.players[id];
+    if(!p.alive||p.body.length===0)return;
+    let md=p.dir;
+    if(p.nextDir!==Direction.STOP){
+        const opp=(p.dir===Direction.UP&&p.nextDir===Direction.DOWN)||
+                 (p.dir===Direction.DOWN&&p.nextDir===Direction.UP)||
+                 (p.dir===Direction.LEFT&&p.nextDir===Direction.RIGHT)||
+                 (p.dir===Direction.RIGHT&&p.nextDir===Direction.LEFT);
+        if(!opp)md=p.nextDir;
+        p.dir=md;p.nextDir=Direction.STOP;
     }
-    const nh = {x: p.body[0].x, y: p.body[0].y};
-    switch (md) {
-        case Direction.UP: nh.y--; break;
-        case Direction.DOWN: nh.y++; break;
-        case Direction.LEFT: nh.x--; break;
-        case Direction.RIGHT: nh.x++; break;
-        default: return;
+    const nh={x:p.body[0].x,y:p.body[0].y};
+    switch(md){
+        case Direction.UP:nh.y--;break;
+        case Direction.DOWN:nh.y++;break;
+        case Direction.LEFT:nh.x--;break;
+        case Direction.RIGHT:nh.x++;break;
+        default:return;
     }
-    if (nh.x <= 0 || nh.x >= GRID_W - 1 || nh.y <= 0 || nh.y >= GRID_H - 1) { p.alive = false; gameState.aliveCount--; return; }
-    const ate = (nh.x === gameState.food.x && nh.y === gameState.food.y);
-    p.body.unshift({x: nh.x, y: nh.y});
-    if (ate) { p.score += 10; genFood(); } else p.body.pop();
-    for (let i = 1; i < p.body.length; i++) {
-        if (p.body[0].x === p.body[i].x && p.body[0].y === p.body[i].y) { p.alive = false; gameState.aliveCount--; return; }
+    if(nh.x<=0||nh.x>=GRID_W-1||nh.y<=0||nh.y>=GRID_H-1){p.alive=false;gameState.aliveCount--;return;}
+    const ate=(nh.x===gameState.food.x&&nh.y===gameState.food.y);
+    p.body.unshift({x:nh.x,y:nh.y});
+    if(ate){p.score+=10;genFood();}else p.body.pop();
+    for(let i=1;i<p.body.length;i++){
+        if(p.body[0].x===p.body[i].x&&p.body[0].y===p.body[i].y){p.alive=false;gameState.aliveCount--;return;}
     }
-    for (let o = 0; o < MAX_PLAYERS; o++) {
-        if (o === id || !gameState.players[o].alive) continue;
-        for (const seg of gameState.players[o].body) {
-            if (p.body[0].x === seg.x && p.body[0].y === seg.y) { p.alive = false; gameState.aliveCount--; return; }
+    for(let o=0;o<MAX_PLAYERS;o++){
+        if(o===id||!gameState.players[o].alive)continue;
+        for(const seg of gameState.players[o].body){
+            if(p.body[0].x===seg.x&&p.body[0].y===seg.y){p.alive=false;gameState.aliveCount--;return;}
         }
     }
 }
-
-function tick() {
-    if (netRole !== NetRole.HOST || appState !== AppState.PLAYING) return;
-    for (let i = 0; i < MAX_PLAYERS; i++) if (gameState.players[i].alive) updatePlayer(i);
-    let alive = 0; for (const p of gameState.players) if (p.alive) alive++;
-    if (alive <= 1 && !gameState.gameOver && gameState.aliveCount > 0) gameState.gameOver = true;
+function tick(){
+    if(netRole!==NetRole.HOST||appState!==AppState.PLAYING)return;
+    for(let i=0;i<MAX_PLAYERS;i++)if(gameState.players[i].alive)updatePlayer(i);
+    let alive=0;for(const p of gameState.players)if(p.alive)alive++;
+    if(alive===0&&!gameState.gameOver)gameState.gameOver=true;
     sendGameState();
 }
 
 // ============================================================
 // NETWORKING
 // ============================================================
-function sendPkt(dc, type, data) {
-    if (!dc || dc.readyState !== 'open') return false;
-    const len = 1 + (data ? data.byteLength : 0);
-    const buf = new ArrayBuffer(len);
-    const v = new Uint8Array(buf);
-    v[0] = type;
-    if (data) v.set(new Uint8Array(data), 1);
+function sendPkt(dc,type,data){
+    if(!dc||dc.readyState!=='open')return false;
+    const len=1+(data?data.byteLength:0);
+    const buf=new ArrayBuffer(len);
+    const v=new Uint8Array(buf);
+    v[0]=type;
+    if(data)v.set(new Uint8Array(data),1);
     dc.send(buf);
     return true;
 }
-
-function sendGameState() {
-    let size = 4;
-    for (let i = 0; i < MAX_PLAYERS; i++) { size += 5; size += gameState.players[i].body.length * 2; }
-    const buf = new ArrayBuffer(size);
-    const v = new Uint8Array(buf);
-    let o = 0;
-    v[o++] = gameState.food.x; v[o++] = gameState.food.y;
-    v[o++] = gameState.gameOver ? 1 : 0; v[o++] = gameState.aliveCount;
-    for (let i = 0; i < MAX_PLAYERS; i++) {
-        const p = gameState.players[i];
-        v[o++] = p.active ? 1 : 0; v[o++] = p.alive ? 1 : 0; v[o++] = p.score; v[o++] = p.dir; v[o++] = p.body.length;
-        for (const seg of p.body) { v[o++] = seg.x; v[o++] = seg.y; }
+function sendGameState(){
+    let size=4;
+    for(let i=0;i<MAX_PLAYERS;i++){size+=5;size+=gameState.players[i].body.length*2;}
+    const buf=new ArrayBuffer(size);
+    const v=new Uint8Array(buf);
+    let o=0;
+    v[o++]=gameState.food.x;v[o++]=gameState.food.y;
+    v[o++]=gameState.gameOver?1:0;v[o++]=gameState.aliveCount;
+    for(let i=0;i<MAX_PLAYERS;i++){
+        const p=gameState.players[i];
+        v[o++]=p.active?1:0;v[o++]=p.alive?1:0;v[o++]=p.score;v[o++]=p.dir;v[o++]=p.body.length;
+        for(const seg of p.body){v[o++]=seg.x;v[o++]=seg.y;}
     }
-    for (let i = 0; i < clientChannels.length; i++) {
-        if (clientChannels[i] && clientChannels[i].readyState === 'open') sendPkt(clientChannels[i], PacketType.GAME_STATE, buf);
-    }
-}
-
-function parseGameState(data) {
-    const v = new Uint8Array(data);
-    let o = 0;
-    gameState.food = {x: v[o++], y: v[o++]};
-    gameState.gameOver = v[o++] !== 0; gameState.aliveCount = v[o++];
-    for (let i = 0; i < MAX_PLAYERS; i++) {
-        const p = gameState.players[i];
-        if (o >= v.length) break;
-        p.active = v[o++] !== 0; p.alive = v[o++] !== 0; p.score = v[o++]; p.dir = v[o++];
-        const bl = v[o++]; p.body = [];
-        for (let b = 0; b < bl; b++) { if (o + 1 >= v.length) break; p.body.push({x: v[o++], y: v[o++]}); }
+    for(let i=0;i<clientChannels.length;i++){
+        if(clientChannels[i]&&clientChannels[i].readyState==='open')sendPkt(clientChannels[i],PacketType.GAME_STATE,buf);
     }
 }
-
-// Encode/decode SDP safely using base64url
-function encodeSDP(sdp) {
-    const enc = new TextEncoder();
-    const bytes = enc.encode(sdp);
-    let binary = '';
-    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-    return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+function parseGameState(data){
+    const v=new Uint8Array(data);
+    let o=0;
+    gameState.food={x:v[o++],y:v[o++]};
+    gameState.gameOver=v[o++]!==0;gameState.aliveCount=v[o++];
+    for(let i=0;i<MAX_PLAYERS;i++){
+        const p=gameState.players[i];
+        if(o>=v.length)break;
+        p.active=v[o++]!==0;p.alive=v[o++]!==0;p.score=v[o++];p.dir=v[o++];
+        const bl=v[o++];p.body=[];
+        for(let b=0;b<bl;b++){if(o+1>=v.length)break;p.body.push({x:v[o++],y:v[o++]});}
+    }
 }
-function decodeSDP(encoded) {
-    // Restore base64
-    let base64 = encoded.replace(/-/g, '+').replace(/_/g, '/');
-    while (base64.length % 4) base64 += '=';
-    const binary = atob(base64);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-    const dec = new TextDecoder();
+function encodeSDP(sdp){
+    const enc=new TextEncoder();
+    const bytes=enc.encode(sdp);
+    let binary='';
+    for(let i=0;i<bytes.length;i++)binary+=String.fromCharCode(bytes[i]);
+    return btoa(binary).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+function decodeSDP(encoded){
+    let base64=encoded.replace(/-/g,'+').replace(/_/g,'/');
+    while(base64.length%4)base64+='=';
+    const binary=atob(base64);
+    const bytes=new Uint8Array(binary.length);
+    for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
+    const dec=new TextDecoder();
     return dec.decode(bytes);
 }
-
-// ===== HOST: handle new client connection =====
-function setupHostDataChannel(dc) {
-    dc.onopen = () => {
-        const slot = clientChannels.length;
-        const playerId = slot + 1;
+function setupHostDataChannel(dc){
+    dc.onopen=()=>{
+        const slot=clientChannels.length;
+        const playerId=slot+1;
         clientChannels.push(dc);
-        gameState.players[playerId].active = true;
+        gameState.players[playerId].active=true;
         activePlayerCount++;
-        if (appState === AppState.LOBBY) spawnPlayer(playerId);
-        const buf = new ArrayBuffer(1);
-        const v = new Uint8Array(buf);
-        v[0] = playerId;
-        sendPkt(dc, PacketType.JOIN_ACCEPT, buf);
+        if(appState===AppState.LOBBY)spawnPlayer(playerId);
+        const buf=new ArrayBuffer(1);
+        const v=new Uint8Array(buf);
+        v[0]=playerId;
+        sendPkt(dc,PacketType.JOIN_ACCEPT,buf);
         updateLobbyUI();
-        setConnectionStatus('Player ' + (playerId + 1) + ' connected!');
+        setConnectionStatus('Player '+(playerId+1)+' connected!');
         resetInviteUI();
     };
-
-    dc.onmessage = (e) => {
-        const v = new Uint8Array(e.data);
-        if (v.length < 1) return;
-        const type = v[0]; const data = v.slice(1);
-        if (type === PacketType.PLAYER_INPUT && data.length >= 1) {
-            const dir = data[0];
-            const idx = clientChannels.indexOf(dc);
-            if (idx >= 0) {
-                const pid = idx + 1;
-                const p = gameState.players[pid];
-                if (p && p.alive) {
-                    let lq = p.nextDir;
-                    if (lq === Direction.STOP) lq = p.dir;
-                    const opp = (lq === Direction.UP && dir === Direction.DOWN) ||
-                                (lq === Direction.DOWN && dir === Direction.UP) ||
-                                (lq === Direction.LEFT && dir === Direction.RIGHT) ||
-                                (lq === Direction.RIGHT && dir === Direction.LEFT);
-                    if (!opp) p.nextDir = dir;
+    dc.onmessage=(e)=>{
+        const v=new Uint8Array(e.data);
+        if(v.length<1)return;
+        const type=v[0];const data=v.slice(1);
+        if(type===PacketType.PLAYER_INPUT&&data.length>=1){
+            const dir=data[0];
+            const idx=clientChannels.indexOf(dc);
+            if(idx>=0){
+                const pid=idx+1;
+                const p=gameState.players[pid];
+                if(p&&p.alive){
+                    let lq=p.nextDir;
+                    if(lq===Direction.STOP)lq=p.dir;
+                    const opp=(lq===Direction.UP&&dir===Direction.DOWN)||
+                             (lq===Direction.DOWN&&dir===Direction.UP)||
+                             (lq===Direction.LEFT&&dir===Direction.RIGHT)||
+                             (lq===Direction.RIGHT&&dir===Direction.LEFT);
+                    if(!opp)p.nextDir=dir;
                 }
             }
         }
     };
-
-    dc.onclose = () => {
-        const idx = clientChannels.indexOf(dc);
-        if (idx >= 0) {
-            clientChannels.splice(idx, 1);
-            const pid = idx + 1;
-            gameState.players[pid].active = false;
-            gameState.players[pid].alive = false;
-            gameState.players[pid].body = [];
+    dc.onclose=()=>{
+        const idx=clientChannels.indexOf(dc);
+        if(idx>=0){
+            clientChannels.splice(idx,1);
+            const pid=idx+1;
+            gameState.players[pid].active=false;
+            gameState.players[pid].alive=false;
+            gameState.players[pid].body=[];
             activePlayerCount--;
             updateLobbyUI();
         }
     };
-
-    // Check if already open (can happen with localhost)
-    if (dc.readyState === 'open') {
-        setTimeout(() => dc.onopen(), 0);
-    }
+    if(dc.readyState==='open')setTimeout(()=>dc.onopen(),0);
 }
-
-// ===== CLIENT SIDE: handle received messages =====
-function onClientMessage(e) {
-    const v = new Uint8Array(e.data);
-    if (v.length < 1) return;
-    const type = v[0]; const data = v.slice(1);
-    if (type === PacketType.JOIN_ACCEPT && data.length >= 1) {
-        localPlayerId = data[0];
-        setStatusMsg('You are P' + (localPlayerId + 1), 300);
+function onClientMessage(e){
+    const v=new Uint8Array(e.data);
+    if(v.length<1)return;
+    const type=v[0];const data=v.slice(1);
+    if(type===PacketType.JOIN_ACCEPT&&data.length>=1){
+        localPlayerId=data[0];
+        setStatusMsg('You are P'+(localPlayerId+1),300);
         updateLobbyUI();
-    } else if (type === PacketType.GAME_STATE && data.length >= 4) {
+    }else if(type===PacketType.GAME_STATE&&data.length>=4){
         parseGameState(data);
-        if (appState !== AppState.PLAYING) {
-            appState = AppState.PLAYING;
+        if(appState!==AppState.PLAYING){
+            appState=AppState.PLAYING;
             hideAllOverlays();
+            updateControllerUI();
         }
     }
 }
-
-// ===== HOST: Generate invite offer =====
-async function hostCreateOffer() {
-    const pc = new RTCPeerConnection(STUN_CONFIG);
-    const dc = pc.createDataChannel('game');
-    hostPC = pc;
-    hostDC = dc;
-
-    // Set up data channel callbacks immediately
+async function hostCreateOffer(){
+    const pc=new RTCPeerConnection(STUN_CONFIG);
+    const dc=pc.createDataChannel('game');
+    hostPC=pc;hostDC=dc;
     setupHostDataChannel(dc);
-
-    // Get the offer SDP with ICE candidates
-    const sdp = await new Promise((resolve, reject) => {
-        let gatheringDone = false;
-
-        // Use onicegatheringstatechange instead of onicecandidate(null)
-        // This is more reliable across browsers
-        pc.onicegatheringstatechange = () => {
-            if (pc.iceGatheringState === 'complete' && !gatheringDone) {
-                gatheringDone = true;
+    const sdp=await new Promise((resolve,reject)=>{
+        let gatheringDone=false;
+        pc.onicegatheringstatechange=()=>{
+            if(pc.iceGatheringState==='complete'&&!gatheringDone){
+                gatheringDone=true;
                 resolve(pc.localDescription.sdp);
             }
         };
-
-        pc.createOffer().then(offer => pc.setLocalDescription(offer)).catch(err => reject(err));
-
-        // Fallback: resolve after 5 seconds even if ICE gathering didn't complete
-        // This works for localhost/LAN where no STUN is needed
-        setTimeout(() => {
-            if (!gatheringDone) {
-                gatheringDone = true;
-                resolve(pc.localDescription.sdp);
-            }
-        }, 5000);
+        pc.createOffer().then(offer=>pc.setLocalDescription(offer)).catch(err=>reject(err));
+        setTimeout(()=>{if(!gatheringDone){gatheringDone=true;resolve(pc.localDescription.sdp);}},5000);
     });
-
     return sdp;
 }
-
-// ===== CLIENT: join via host's offer =====
-async function clientJoin(offerSdp) {
-    const pc = new RTCPeerConnection(STUN_CONFIG);
-
-    // Set up data channel handler immediately (before setRemoteDescription)
-    pc.ondatachannel = (event) => {
-        clientDC = event.channel;
-        clientDC.onopen = () => { netRole = NetRole.CLIENT; setConnectionStatus('Connected to host!'); updateLobbyUI(); };
-        clientDC.onmessage = onClientMessage;
-        clientDC.onclose = () => { setStatusMsg('Disconnected from host', 300); cleanupClient(); appState = AppState.MENU; showMenu(); };
-        // Handle already-open data channel (rare edge case)
-        if (clientDC.readyState === 'open') { netRole = NetRole.CLIENT; setConnectionStatus('Connected to host!'); updateLobbyUI(); }
+async function clientJoin(offerSdp){
+    const pc=new RTCPeerConnection(STUN_CONFIG);
+    pc.ondatachannel=(event)=>{
+        clientDC=event.channel;
+        clientDC.onopen=()=>{netRole=NetRole.CLIENT;setConnectionStatus('Connected to host!');updateLobbyUI();updateControllerUI();};
+        clientDC.onmessage=onClientMessage;
+        clientDC.onclose=()=>{setStatusMsg('Disconnected from host',300);cleanupClient();appState=AppState.MENU;showMenu();updateControllerUI();};
+        if(clientDC.readyState==='open'){netRole=NetRole.CLIENT;setConnectionStatus('Connected to host!');updateLobbyUI();updateControllerUI();}
     };
-
-    // Wait for the answer SDP to be ready (ICE gathering complete or fallback timeout)
-    const sdp = await new Promise((resolve, reject) => {
-        let gatheringDone = false;
-
-        pc.onicegatheringstatechange = () => {
-            if (pc.iceGatheringState === 'complete' && !gatheringDone) {
-                gatheringDone = true;
+    const sdp=await new Promise((resolve,reject)=>{
+        let gatheringDone=false;
+        pc.onicegatheringstatechange=()=>{
+            if(pc.iceGatheringState==='complete'&&!gatheringDone){
+                gatheringDone=true;
                 resolve(pc.localDescription.sdp);
             }
         };
-
-        pc.setRemoteDescription({type: 'offer', sdp: offerSdp})
-          .then(() => pc.createAnswer())
-          .then(answer => pc.setLocalDescription(answer))
-          .catch(err => reject(err));
-
-        // Fallback: resolve after 3 seconds even if ICE gathering didn't complete
-        // On localhost no STUN is needed, so this is fine
-        setTimeout(() => {
-            if (!gatheringDone) {
-                gatheringDone = true;
-                resolve(pc.localDescription.sdp);
-            }
-        }, 3000);
+        pc.setRemoteDescription({type:'offer',sdp:offerSdp})
+          .then(()=>pc.createAnswer())
+          .then(answer=>pc.setLocalDescription(answer))
+          .catch(err=>reject(err));
+        setTimeout(()=>{if(!gatheringDone){gatheringDone=true;resolve(pc.localDescription.sdp);}},3000);
     });
-
-    clientAnswerSDP = sdp;
-    return {pc, sdp};
+    clientAnswerSDP=sdp;
+    return {pc,sdp};
 }
-
-// ===== CLEANUP =====
-function cleanupHost() {
-    for (const dc of clientChannels) { try { dc.close(); } catch(e) {} }
-    clientChannels = [];
-    if (hostPC) { try { hostPC.close(); } catch(e) {} }
-    hostPC = null; hostDC = null; netRole = NetRole.NONE;
-    activePlayerCount = 0; localPlayerId = -1;
+function cleanupHost(){
+    for(const dc of clientChannels){try{dc.close();}catch(e){}}
+    clientChannels=[];
+    if(hostPC){try{hostPC.close();}catch(e){}}hostPC=null;hostDC=null;netRole=NetRole.NONE;
+    activePlayerCount=0;localPlayerId=-1;
 }
-function cleanupClient() {
-    if (clientDC) { try { clientDC.close(); } catch(e) {} clientDC = null; }
-    if (clientPC) { try { clientPC.close(); } catch(e) {} clientPC = null; }
-    netRole = NetRole.NONE; localPlayerId = -1;
+function cleanupClient(){
+    if(clientDC){try{clientDC.close();}catch(e){}clientDC=null;}
+    if(clientPC){try{clientPC.close();}catch(e){}clientPC=null;}
+    netRole=NetRole.NONE;localPlayerId=-1;
 }
-function cleanupAll() { cleanupHost(); cleanupClient(); }
+function cleanupAll(){cleanupHost();cleanupClient();}
 
 // ============================================================
 // UI CONTROL
 // ============================================================
-function hideAllOverlays() {
+function hideAllOverlays(){
     document.getElementById('menu-overlay').classList.add('hidden');
     document.getElementById('lobby-overlay').classList.add('hidden');
 }
-function showMenu() { hideAllOverlays(); document.getElementById('menu-overlay').classList.remove('hidden'); appState = AppState.MENU; }
+function showMenu(){
+    hideAllOverlays();
+    document.getElementById('menu-overlay').classList.remove('hidden');
+    document.getElementById('controller-area').classList.add('hidden-ctrl');
+    appState=AppState.MENU;
+}
+let statusMsgTimeout=null;
+function setStatusMsg(msg,duration){
+    const el=document.getElementById('menu-status');
+    if(el){
+        el.textContent=msg;
+        el.style.color=msg.toLowerCase().includes('fail')?'#FF4444':'#CCCCCC';
+        if(statusMsgTimeout)clearTimeout(statusMsgTimeout);
+        if(duration)statusMsgTimeout=setTimeout(()=>{if(el)el.textContent='';},duration*1000/60);
+    }
+}
+function setConnectionStatus(msg){
+    const el1=document.getElementById('sdp-status');
+    const el2=document.getElementById('sdp-receive-status');
+    if(el1)el1.textContent=msg;
+    if(el2)el2.textContent=msg;
+}
 
-let statusMsgTimeout = null;
-function setStatusMsg(msg, duration) {
-    const el = document.getElementById('menu-status');
-    if (el) {
-        el.textContent = msg;
-        el.style.color = msg.toLowerCase().includes('fail') ? '#FF4444' : '#CCCCCC';
-        if (statusMsgTimeout) clearTimeout(statusMsgTimeout);
-        if (duration) statusMsgTimeout = setTimeout(() => { if (el) el.textContent = ''; }, duration * 1000 / 60);
+// ============================================================
+// CONTROLLER UI VISIBILITY
+// ============================================================
+function updateControllerUI(){
+    const ctrl=document.getElementById('controller-area');
+    const btnStart=document.getElementById('btn-start-game');
+    const btnRestart=document.getElementById('btn-restart-game');
+    const btnQuit=document.getElementById('btn-quit-game');
+
+    if(appState===AppState.MENU){
+        ctrl.classList.add('hidden-ctrl');
+        return;
+    }
+    ctrl.classList.remove('hidden-ctrl');
+
+    if(appState===AppState.LOBBY){
+        if(netRole===NetRole.HOST&&activePlayerCount>=1&&document.getElementById('host-invite-row').style.display!=='none'){
+            btnStart.classList.remove('hidden-btn');
+        }else{
+            btnStart.classList.add('hidden-btn');
+        }
+        btnRestart.classList.add('hidden-btn');
+        btnQuit.classList.remove('hidden-btn');
+    }else if(appState===AppState.PLAYING){
+        btnStart.classList.add('hidden-btn');
+        if(gameState.gameOver&&netRole===NetRole.HOST){
+            btnRestart.classList.remove('hidden-btn');
+        }else{
+            btnRestart.classList.add('hidden-btn');
+        }
+        btnQuit.classList.remove('hidden-btn');
     }
 }
 
-function setConnectionStatus(msg) {
-    const el1 = document.getElementById('sdp-status');
-    const el2 = document.getElementById('sdp-receive-status');
-    if (el1) el1.textContent = msg;
-    if (el2) el2.textContent = msg;
+// ============================================================
+// ACTION BUTTONS
+// ============================================================
+function onActionStart(){
+    if(appState===AppState.LOBBY&&netRole===NetRole.HOST&&activePlayerCount>=1){
+        startMatch();sendGameState();
+        updateControllerUI();
+    }
+}
+function onActionRestart(){
+    if(appState===AppState.PLAYING&&gameState.gameOver&&netRole===NetRole.HOST){
+        resetAll();sendGameState();
+        updateControllerUI();
+    }
+}
+function onActionQuit(){
+    if(appState===AppState.LOBBY){
+        if(netRole===NetRole.CLIENT)cancelJoin();
+        else{cleanupHost();showMenu();}
+    }else if(appState===AppState.PLAYING){
+        cleanupAll();appState=AppState.MENU;showMenu();
+    }
+    updateControllerUI();
 }
 
 // ===== CREATE GAME (HOST) =====
-async function createGame() {
+async function createGame(){
     cleanupAll();
-    netRole = NetRole.HOST;
+    netRole=NetRole.HOST;
     hostPrepare();
     hideAllOverlays();
     document.getElementById('lobby-overlay').classList.remove('hidden');
+    document.getElementById('controller-area').classList.remove('hidden-ctrl');
     updateLobbyUI();
-    try {
-        const resp = await fetch('https://api.ipify.org?format=json');
-        const data = await resp.json();
-        document.getElementById('host-ip-info').textContent = 'Public IP: ' + data.ip + ' : 8888';
-    } catch(e) {
-        document.getElementById('host-ip-info').textContent = 'LAN mode (share IP manually)';
+    updateControllerUI();
+    try{
+        const resp=await fetch('https://api.ipify.org?format=json');
+        const data=await resp.json();
+        document.getElementById('host-ip-info').textContent='Public IP: '+data.ip+' : 8888';
+    }catch(e){
+        document.getElementById('host-ip-info').textContent='LAN mode (share IP manually)';
     }
     document.getElementById('host-invite-row').classList.remove('hidden');
-    document.getElementById('lobby-wait-msg').textContent = 'Click "Copy Invite Link" to invite players.';
+    document.getElementById('lobby-wait-msg').textContent='Click "Copy Invite Link" to invite players.';
 }
 
 // ===== HOST: Copy invite =====
-async function hostCopyInvite() {
-    if (activePlayerCount >= MAX_PLAYERS) { setConnectionStatus('Maximum 4 players already connected!'); return; }
-    document.getElementById('btn-invite').disabled = true;
-    document.getElementById('btn-invite').textContent = 'Generating...';
+async function hostCopyInvite(){
+    if(activePlayerCount>=MAX_PLAYERS){setConnectionStatus('Maximum 4 players already connected!');return;}
+    document.getElementById('btn-invite').disabled=true;
+    document.getElementById('btn-invite').textContent='Generating...';
     setConnectionStatus('Creating connection...');
-
-    try {
-        const sdp = await hostCreateOffer();
-        const encoded = encodeSDP(sdp);
-        sdpBuffer = encoded;
-
-        document.getElementById('host-invite-row').style.display = 'none';
+    try{
+        const sdp=await hostCreateOffer();
+        const encoded=encodeSDP(sdp);
+        sdpBuffer=encoded;
+        document.getElementById('host-invite-row').style.display='none';
         document.getElementById('sdp-exchange').classList.remove('hidden');
-        document.getElementById('sdp-step-label').textContent = 'Step 1: Copy this code and send to your friend';
-        document.getElementById('sdp-textarea').value = encoded;
-        document.getElementById('sdp-textarea').readOnly = true;
-        document.getElementById('sdp-copy-btn').style.display = 'inline-block';
-        document.getElementById('sdp-copy-btn').textContent = 'Copy Code';
-        document.getElementById('sdp-next-btn').style.display = 'inline-block';
-        document.getElementById('sdp-next-btn').textContent = 'I Have Their Response';
-        document.getElementById('sdp-next-btn').onclick = () => {
+        document.getElementById('sdp-step-label').textContent='Step 1: Copy this code and send to your friend';
+        document.getElementById('sdp-textarea').value=encoded;
+        document.getElementById('sdp-textarea').readOnly=true;
+        document.getElementById('sdp-copy-btn').style.display='inline-block';
+        document.getElementById('sdp-copy-btn').textContent='Copy Code';
+        document.getElementById('sdp-next-btn').style.display='inline-block';
+        document.getElementById('sdp-next-btn').textContent='I Have Their Response';
+        document.getElementById('sdp-next-btn').onclick=()=>{
             document.getElementById('sdp-exchange').classList.add('hidden');
             document.getElementById('sdp-receive').classList.remove('hidden');
-            document.getElementById('sdp-receive-label').textContent = 'Step 2: Paste the response code from your friend here:';
-            document.getElementById('sdp-paste-area').value = '';
-            document.getElementById('sdp-paste-area').placeholder = 'Paste the code they sent...';
+            document.getElementById('sdp-receive-label').textContent='Step 2: Paste the response code from your friend here:';
+            document.getElementById('sdp-paste-area').value='';
+            document.getElementById('sdp-paste-area').placeholder='Paste the code they sent...';
             setConnectionStatus('');
         };
         setConnectionStatus('Waiting for friend\'s response...');
-
-    } catch(e) {
-        console.error('Failed to create invite:', e);
+        updateControllerUI();
+    }catch(e){
+        console.error('Failed to create invite:',e);
         setConnectionStatus('Failed to create connection. Try again.');
-        document.getElementById('btn-invite').disabled = false;
-        document.getElementById('btn-invite').textContent = 'Copy Invite Link';
+        document.getElementById('btn-invite').disabled=false;
+        document.getElementById('btn-invite').textContent='Copy Invite Link';
     }
 }
-
-// ===== HOST: Submit pasted answer =====
-async function submitPastedSDP() {
-    const pasted = document.getElementById('sdp-paste-area').value.trim();
-    if (!pasted) { setConnectionStatus('Please paste a valid code.'); return; }
+async function submitPastedSDP(){
+    const pasted=document.getElementById('sdp-paste-area').value.trim();
+    if(!pasted){setConnectionStatus('Please paste a valid code.');return;}
     setConnectionStatus('Connecting...');
-
-    try {
-        const sdp = decodeSDP(pasted);
-        if (!hostPC) { setConnectionStatus('No pending connection. Please generate a new invite.'); return; }
-        await hostPC.setRemoteDescription({type: 'answer', sdp: sdp});
+    try{
+        const sdp=decodeSDP(pasted);
+        if(!hostPC){setConnectionStatus('No pending connection. Please generate a new invite.');return;}
+        await hostPC.setRemoteDescription({type:'answer',sdp:sdp});
         setConnectionStatus('Connected!');
-    } catch(e) {
-        console.error('Failed to connect:', e);
+    }catch(e){
+        console.error('Failed to connect:',e);
         setConnectionStatus('Connection failed. The code might be invalid. Try again.');
     }
 }
-
-function resetInviteUI() {
-    hostPC = null; hostDC = null;
-    document.getElementById('host-invite-row').style.display = 'block';
+function resetInviteUI(){
+    hostPC=null;hostDC=null;
+    document.getElementById('host-invite-row').style.display='block';
     document.getElementById('sdp-exchange').classList.add('hidden');
     document.getElementById('sdp-receive').classList.add('hidden');
-    document.getElementById('btn-invite').disabled = false;
-    document.getElementById('btn-invite').textContent = 'Copy Invite Link';
+    document.getElementById('code-ready-banner').classList.add('hidden');
+    document.getElementById('btn-invite').disabled=false;
+    document.getElementById('btn-invite').textContent='Copy Invite Link';
+    updateControllerUI();
 }
-
-function cancelConnection() {
-    if (hostPC) { try { hostPC.close(); } catch(e) {} hostPC = null; hostDC = null; }
+function cancelConnection(){
+    if(hostPC){try{hostPC.close();}catch(e){}hostPC=null;hostDC=null;}
     resetInviteUI();
     setConnectionStatus('');
 }
-
-// ===== COPY SDP =====
-function copySDP() {
-    const ta = document.getElementById('sdp-textarea');
-    ta.select(); ta.setSelectionRange(0, 9999999);
-    navigator.clipboard.writeText(ta.value).then(() => {
-        document.getElementById('sdp-copy-btn').textContent = 'Copied!';
-        setTimeout(() => { document.getElementById('sdp-copy-btn').textContent = 'Copy Code'; }, 2000);
-    }).catch(() => {
+function copySDP(){
+    const ta=document.getElementById('sdp-textarea');
+    ta.select();ta.setSelectionRange(0,9999999);
+    navigator.clipboard.writeText(ta.value).then(()=>{
+        document.getElementById('sdp-copy-btn').textContent='Copied!';
+        setTimeout(()=>{document.getElementById('sdp-copy-btn').textContent='Copy Code';},2000);
+    }).catch(()=>{
         document.execCommand('copy');
-        document.getElementById('sdp-copy-btn').textContent = 'Copied!';
-        setTimeout(() => { document.getElementById('sdp-copy-btn').textContent = 'Copy Code'; }, 2000);
+        document.getElementById('sdp-copy-btn').textContent='Copied!';
+        setTimeout(()=>{document.getElementById('sdp-copy-btn').textContent='Copy Code';},2000);
     });
 }
-
-// ===== SHOW JOIN UI =====
-function showJoinUI() {
+function showJoinUI(){
     document.getElementById('menu-overlay').classList.add('hidden');
     document.getElementById('lobby-overlay').classList.remove('hidden');
-    document.getElementById('host-ip-info').textContent = '';
-    document.getElementById('host-invite-row').style.display = 'none';
-    document.getElementById('lobby-wait-msg').textContent = '';
+    document.getElementById('controller-area').classList.remove('hidden-ctrl');
+    document.getElementById('host-ip-info').textContent='';
+    document.getElementById('host-invite-row').style.display='none';
+    document.getElementById('lobby-wait-msg').textContent='';
     document.getElementById('sdp-exchange').classList.add('hidden');
+    document.getElementById('code-ready-banner').classList.add('hidden');
     document.getElementById('sdp-receive').classList.remove('hidden');
-    document.getElementById('sdp-receive-label').textContent = 'Paste the invite code from the host here:';
-    document.getElementById('sdp-paste-area').value = '';
-    document.getElementById('sdp-paste-area').placeholder = 'Paste the invite code...';
-    document.getElementById('sdp-receive-status').textContent = '';
-
-    const submitBtn = document.querySelector('#sdp-receive .btn-row button:first-child');
-    submitBtn.textContent = 'Join Game';
-    submitBtn.onclick = clientSubmitOffer;
-
-    const cancelBtn = document.querySelector('#sdp-receive .btn-row button:last-child');
-    cancelBtn.onclick = cancelJoin;
-
-    appState = AppState.LOBBY; netRole = NetRole.NONE;
+    document.getElementById('sdp-receive-label').textContent='Paste the invite code from the host here:';
+    document.getElementById('sdp-paste-area').value='';
+    document.getElementById('sdp-paste-area').placeholder='Paste the invite code...';
+    document.getElementById('sdp-receive-status').textContent='';
+    const submitBtn=document.querySelector('#sdp-receive .btn-row button:first-child');
+    submitBtn.textContent='Join Game';
+    submitBtn.onclick=clientSubmitOffer;
+    const cancelBtn=document.querySelector('#sdp-receive .btn-row button:last-child');
+    cancelBtn.onclick=cancelJoin;
+    appState=AppState.LOBBY;netRole=NetRole.NONE;
     updateLobbyUI();
+    updateControllerUI();
 }
-
-async function clientSubmitOffer() {
-    const pasted = document.getElementById('sdp-paste-area').value.trim();
-    if (!pasted) { setConnectionStatus('Please paste the invite code from the host.'); return; }
+async function clientSubmitOffer(){
+    const pasted=document.getElementById('sdp-paste-area').value.trim();
+    if(!pasted){setConnectionStatus('Please paste the invite code from the host.');return;}
     setConnectionStatus('Connecting to host...');
-
-    try {
-        const sdp = decodeSDP(pasted);
-        const result = await clientJoin(sdp);
-        clientPC = result.pc;
-        clientAnswerSDP = result.sdp;
-
-        const encoded = encodeSDP(clientAnswerSDP);
-        sdpBuffer = encoded;
-
+    try{
+        const sdp=decodeSDP(pasted);
+        const result=await clientJoin(sdp);
+        clientPC=result.pc;
+        clientAnswerSDP=result.sdp;
+        const encoded=encodeSDP(clientAnswerSDP);
+        sdpBuffer=encoded;
         document.getElementById('sdp-receive').classList.add('hidden');
         document.getElementById('sdp-exchange').classList.remove('hidden');
-        document.getElementById('sdp-step-label').textContent = 'Send this response code back to the host:';
-        document.getElementById('sdp-textarea').value = encoded;
-        document.getElementById('sdp-textarea').readOnly = true;
-        document.getElementById('sdp-copy-btn').style.display = 'inline-block';
-        document.getElementById('sdp-copy-btn').textContent = 'Copy Code';
-        document.getElementById('sdp-next-btn').style.display = 'none';
+        document.getElementById('code-ready-banner').classList.remove('hidden');
+        document.getElementById('sdp-step-label').textContent='Send this response code back to the host:';
+        document.getElementById('sdp-textarea').value=encoded;
+        document.getElementById('sdp-textarea').readOnly=true;
+        document.getElementById('sdp-copy-btn').style.display='inline-block';
+        document.getElementById('sdp-copy-btn').textContent='Copy Code';
+        document.getElementById('sdp-next-btn').style.display='none';
         setConnectionStatus('Waiting for host to apply the response...');
-    } catch(e) {
-        console.error('Failed to join:', e);
+        updateControllerUI();
+    }catch(e){
+        console.error('Failed to join:',e);
         setConnectionStatus('Connection failed. Check the code and try again.');
     }
 }
-
-function cancelJoin() {
+function cancelJoin(){
     cleanupClient();
     document.getElementById('lobby-overlay').classList.add('hidden');
     document.getElementById('menu-overlay').classList.remove('hidden');
-    appState = AppState.MENU;
+    document.getElementById('controller-area').classList.add('hidden-ctrl');
+    appState=AppState.MENU;
 }
+function showHelp(){setStatusMsg('Last snake alive wins! Eat food (+10) to grow. Use D-Pad/WASD/Arrows to move.',300);}
 
-function showHelp() { setStatusMsg('Last snake alive wins! Eat food (+10) to grow. WASD/Arrows to move.', 300); }
-
-// ===== UPDATE LOBBY UI =====
-function updateLobbyUI() {
-    document.getElementById('player-count').textContent = activePlayerCount;
-    const listEl = document.getElementById('player-list');
-    let html = '';
-    for (let i = 0; i < MAX_PLAYERS; i++) {
-        if (gameState.players[i].active) {
-            const color = COLORS.PLAYER[i];
-            const you = (i === localPlayerId) ? ' (YOU)' : '';
-            html += '<div class="p-entry"><span class="connected-dot" style="background:' + color + '"></span>Player ' + (i + 1) + you + '</div>';
+// ============================================================
+// UPDATE LOBBY UI
+// ============================================================
+function updateLobbyUI(){
+    document.getElementById('player-count').textContent=activePlayerCount;
+    const listEl=document.getElementById('player-list');
+    let html='';
+    for(let i=0;i<MAX_PLAYERS;i++){
+        if(gameState.players[i].active){
+            const color=COLORS.PLAYER[i];
+            const you=(i===localPlayerId)?' (YOU)':'';
+            html+='<div class="p-entry"><span class="connected-dot" style="background:'+color+'"></span>Player '+(i+1)+you+'</div>';
         }
     }
-    listEl.innerHTML = html;
-
-    const startHint = document.getElementById('start-hint');
-    if (netRole === NetRole.HOST && activePlayerCount >= 1) {
-        const inviteRow = document.getElementById('host-invite-row');
-        startHint.classList.toggle('hidden', inviteRow.style.display === 'none');
-    } else {
-        startHint.classList.add('hidden');
-    }
-
-    if (netRole === NetRole.HOST) {
-        document.getElementById('lobby-title').textContent = 'LOBBY (HOST)';
-        document.getElementById('lobby-wait-msg').textContent = 'Press SPACE to start the game!';
-    } else if (netRole === NetRole.CLIENT) {
-        document.getElementById('lobby-title').textContent = 'LOBBY';
-        document.getElementById('lobby-wait-msg').textContent = 'Waiting for host to start...';
-    } else {
-        document.getElementById('lobby-title').textContent = 'LOBBY';
-        document.getElementById('lobby-wait-msg').textContent = 'Paste the invite code to join.';
+    listEl.innerHTML=html;
+    const startHint=document.getElementById('start-hint');
+    if(netRole===NetRole.HOST&&activePlayerCount>=1){
+        const inviteRow=document.getElementById('host-invite-row');
+        startHint.classList.toggle('hidden',inviteRow.style.display==='none');
+    }else{startHint.classList.add('hidden');}
+    if(netRole===NetRole.HOST){
+        document.getElementById('lobby-title').textContent='LOBBY (HOST)';
+        document.getElementById('lobby-wait-msg').textContent='Tap START or press SPACE to begin!';
+    }else if(netRole===NetRole.CLIENT){
+        document.getElementById('lobby-title').textContent='LOBBY';
+        document.getElementById('lobby-wait-msg').textContent='Waiting for host to start...';
+    }else{
+        document.getElementById('lobby-title').textContent='LOBBY';
+        document.getElementById('lobby-wait-msg').textContent='Paste the invite code to join.';
     }
 }
 
 // ============================================================
 // RENDERING
 // ============================================================
-function renderMenu() {
-    fillRect(0, 0, WIN_W, WIN_H, '#0D0D1A');
-    drawCentered('SNAKE', 50, '#00FF88');
-    drawCentered('4 PLAYER MULTIPLAYER (port 8888)', 80, '#CCCCCC');
-    drawCentered('1 - CREATE GAME (HOST)', 150, '#CCCCCC');
-    drawCentered('2 - JOIN GAME', 180, '#CCCCCC');
-    drawCentered('3 - HOW TO PLAY', 210, '#CCCCCC');
-    drawCentered('WASD/Arrows: Move  ESC: Quit', WIN_H - 30, '#8888AA');
-}
-
-function renderLobby() { fillRect(0, 0, WIN_W, WIN_H, '#0D0D1A'); }
-
-function renderGame() {
-    fillRect(0, 0, BUFFER_W, BUFFER_H, '#1A1A2E');
-    ctx.fillStyle = '#16213E';
-    for (let gx = 0; gx < GRID_W; gx++)
-        for (let gy = 0; gy < GRID_H; gy++)
-            ctx.fillRect(gx * CELL_SIZE, gy * CELL_SIZE, 1, 1);
-    for (let gx = 0; gx < GRID_W; gx++) { drawCell(gx, 0, '#E94560'); drawCell(gx, GRID_H - 1, '#E94560'); }
-    for (let gy = 0; gy < GRID_H; gy++) { drawCell(0, gy, '#E94560'); drawCell(GRID_W - 1, gy, '#E94560'); }
-    drawCell(gameState.food.x, gameState.food.y, '#FF4444');
-    for (let p = 0; p < MAX_PLAYERS; p++) {
-        const pl = gameState.players[p];
-        if (!pl.active || pl.body.length === 0) continue;
-        for (let i = 0; i < pl.body.length; i++) {
-            const seg = pl.body[i];
-            if (i === 0) {
-                const px = seg.x * CELL_SIZE, py = seg.y * CELL_SIZE;
-                fillRect(px, py, CELL_SIZE, CELL_SIZE, COLORS.PLAYER[p]);
-                ctx.fillStyle = '#FFFFFF';
-                ctx.fillRect(px + 7, py + 7, 2, 2);
-                ctx.fillRect(px + 13, py + 7, 2, 2);
-            } else drawCell(seg.x, seg.y, COLORS.BODY[p]);
+function renderMenu(){fillRect(0,0,WIN_W,WIN_H,'#0D0D1A');}
+function renderLobby(){fillRect(0,0,WIN_W,WIN_H,'#0D0D1A');}
+function renderGame(){
+    fillRect(0,0,BUFFER_W,BUFFER_H,'#1A1A2E');
+    ctx.fillStyle='#16213E';
+    for(let gx=0;gx<GRID_W;gx++)
+        for(let gy=0;gy<GRID_H;gy++)
+            ctx.fillRect(gx*CELL_SIZE,gy*CELL_SIZE,1,1);
+    for(let gx=0;gx<GRID_W;gx++){drawCell(gx,0,'#E94560');drawCell(gx,GRID_H-1,'#E94560');}
+    for(let gy=0;gy<GRID_H;gy++){drawCell(0,gy,'#E94560');drawCell(GRID_W-1,gy,'#E94560');}
+    drawCell(gameState.food.x,gameState.food.y,'#FF4444');
+    for(let p=0;p<MAX_PLAYERS;p++){
+        const pl=gameState.players[p];
+        if(!pl.active||pl.body.length===0)continue;
+        for(let i=0;i<pl.body.length;i++){
+            const seg=pl.body[i];
+            if(i===0){
+                const px=seg.x*CELL_SIZE,py=seg.y*CELL_SIZE;
+                fillRect(px,py,CELL_SIZE,CELL_SIZE,COLORS.PLAYER[p]);
+                ctx.fillStyle='#FFFFFF';
+                const eyeOff=Math.max(2,Math.round(CELL_SIZE*0.35));
+                const eyeSize=Math.max(1,Math.round(CELL_SIZE*0.1));
+                ctx.fillRect(px+eyeOff,py+eyeOff,eyeSize,eyeSize);
+                ctx.fillRect(px+CELL_SIZE-eyeOff-eyeSize,py+eyeOff,eyeSize,eyeSize);
+            }else drawCell(seg.x,seg.y,COLORS.BODY[p]);
         }
     }
-    if (gameState.gameOver) {
-        fillRect(0, 0, BUFFER_W, BUFFER_H, 'rgba(0,0,0,0.53)');
-        drawCentered('GAME OVER', BUFFER_H / 2 - 10, '#FF4444');
-        let wid = -1, ms = -1;
-        for (let i = 0; i < MAX_PLAYERS; i++) {
-            if (gameState.players[i].active && gameState.players[i].alive) { wid = i; break; }
-            if (gameState.players[i].active && gameState.players[i].score > ms) { ms = gameState.players[i].score; wid = i; }
+    if(gameState.gameOver){
+        fillRect(0,0,BUFFER_W,BUFFER_H,'rgba(0,0,0,0.53)');
+        drawCentered('GAME OVER',BUFFER_H/2-CHAR_PX*CHAR_H/2,'#FF4444');
+        let wid=-1,ms=-1;
+        for(let i=0;i<MAX_PLAYERS;i++){
+            if(gameState.players[i].active&&gameState.players[i].alive){wid=i;break;}
+            if(gameState.players[i].active&&gameState.players[i].score>ms){ms=gameState.players[i].score;wid=i;}
         }
-        if (wid >= 0) drawCentered('P' + (wid + 1) + ' Wins!', BUFFER_H / 2 + 20, COLORS.PLAYER[wid]);
+        if(wid>=0)drawCentered('P'+(wid+1)+' Wins!',BUFFER_H/2+CHAR_PX*CHAR_H+4,COLORS.PLAYER[wid]);
     }
-    fillRect(0, BUFFER_H, WIN_W, 100, '#1A1A2E');
-    for (let i = 0; i < MAX_PLAYERS; i++) {
-        if (!gameState.players[i].active) continue;
-        const x = 10 + i * 200;
-        let s = 'P' + (i + 1) + ': ' + gameState.players[i].score;
-        if (i === localPlayerId) s += ' (YOU)';
-        drawText(s, x, BUFFER_H + 5, COLORS.PLAYER[i]);
-        if (!gameState.players[i].alive && !gameState.gameOver) drawText('DEAD', x, BUFFER_H + 20, '#FF4444');
+    fillRect(0,BUFFER_H,WIN_W,SCORE_H,'#1A1A2E');
+    for(let i=0;i<MAX_PLAYERS;i++){
+        if(!gameState.players[i].active)continue;
+        const x=Math.max(4,WIN_W/MAX_PLAYERS*i+4);
+        let s='P'+(i+1)+':'+gameState.players[i].score;
+        if(i===localPlayerId)s+='(YOU)';
+        drawText(s,x,BUFFER_H+CHAR_PX*2,COLORS.PLAYER[i]);
+        if(!gameState.players[i].alive&&!gameState.gameOver)drawText('DEAD',x,BUFFER_H+CHAR_PX*(CHAR_H+3),'#FF4444');
     }
-    drawText('WASD/Arrows: Move  ESC: Quit', 10, BUFFER_H + 45, '#8888AA');
-    if (netRole === NetRole.HOST && gameState.gameOver) drawText('R: Restart', 10, BUFFER_H + 60, '#CCCCCC');
+    const hintY=BUFFER_H+SCORE_H-CHAR_PX*CHAR_H-2;
+    drawText('D-Pad:Move  Quit:Back',4,hintY,'#8888AA');
+    if(netRole===NetRole.HOST&&gameState.gameOver)drawText('RESTART:R/Tap',4,hintY-CHAR_PX*(CHAR_H+1)-2,'#CCCCCC');
 }
-
-function renderDispatch() {
-    ctx.clearRect(0, 0, WIN_W, WIN_H);
-    switch (appState) {
-        case AppState.MENU: renderMenu(); break;
-        case AppState.LOBBY: renderLobby(); break;
-        case AppState.PLAYING: renderGame(); break;
+function renderDispatch(){
+    ctx.clearRect(0,0,WIN_W,WIN_H);
+    switch(appState){
+        case AppState.MENU:renderMenu();break;
+        case AppState.LOBBY:renderLobby();break;
+        case AppState.PLAYING:renderGame();break;
     }
 }
 
 // ============================================================
-// INPUT
+// INPUT: KEYBOARD (desktop fallback)
 // ============================================================
-document.addEventListener('keydown', (e) => {
-    if (e.repeat) return;
-    if (appState === AppState.MENU) {
-        switch (e.key) {
-            case '1': if (!document.getElementById('menu-overlay').classList.contains('hidden')) createGame(); break;
-            case '2': if (!document.getElementById('menu-overlay').classList.contains('hidden')) showJoinUI(); break;
-            case '3': if (!document.getElementById('menu-overlay').classList.contains('hidden')) showHelp(); break;
-            case 'x': case 'Escape': window.close(); break;
+document.addEventListener('keydown',(e)=>{
+    if(e.repeat)return;
+    if(appState===AppState.MENU){
+        switch(e.key){
+            case '1':if(!document.getElementById('menu-overlay').classList.contains('hidden'))createGame();break;
+            case '2':if(!document.getElementById('menu-overlay').classList.contains('hidden'))showJoinUI();break;
+            case '3':if(!document.getElementById('menu-overlay').classList.contains('hidden'))showHelp();break;
+            case 'x':case 'Escape':window.close();break;
         }
         return;
     }
-    if (appState === AppState.LOBBY) {
-        if (e.key === ' ' || e.key === 'Space') {
-            e.preventDefault();
-            if (netRole === NetRole.HOST && activePlayerCount >= 1) { startMatch(); sendGameState(); }
-        }
-        if (e.key === 'x' || e.key === 'Escape') {
-            if (netRole === NetRole.CLIENT) cancelJoin(); else { cleanupHost(); showMenu(); }
-        }
+    if(appState===AppState.LOBBY){
+        if(e.key===' '||e.key==='Space'){e.preventDefault();onActionStart();}
+        if(e.key==='x'||e.key==='Escape'){onActionQuit();}
         return;
     }
-    if (appState === AppState.PLAYING) {
-        if (e.key === 'x' || e.key === 'Escape') { cleanupAll(); appState = AppState.MENU; showMenu(); return; }
-        if (e.key === 'r' || e.key === 'R') { if (gameState.gameOver && netRole === NetRole.HOST) { resetAll(); sendGameState(); } return; }
+    if(appState===AppState.PLAYING){
+        if(e.key==='x'||e.key==='Escape'){onActionQuit();return;}
+        if(e.key==='r'||e.key==='R'){onActionRestart();return;}
     }
 });
 
-const keys = {};
-document.addEventListener('keydown', (e) => { if (!e.repeat) keys[e.key] = true; });
-document.addEventListener('keyup', (e) => { keys[e.key] = false; });
+const keys={};
+document.addEventListener('keydown',(e)=>{if(!e.repeat)keys[e.key]=true;});
+document.addEventListener('keyup',(e)=>{keys[e.key]=false;});
 
-function processInput() {
-    if (appState !== AppState.PLAYING || gameState.gameOver) return;
-    let nd = Direction.STOP;
-    if (keys['ArrowUp'] || keys['w'] || keys['W']) nd = Direction.UP;
-    else if (keys['ArrowDown'] || keys['s'] || keys['S']) nd = Direction.DOWN;
-    else if (keys['ArrowLeft'] || keys['a'] || keys['A']) nd = Direction.LEFT;
-    else if (keys['ArrowRight'] || keys['d'] || keys['D']) nd = Direction.RIGHT;
-    if (nd !== Direction.STOP) {
-        if (netRole === NetRole.HOST && localPlayerId >= 0) {
-            const p = gameState.players[localPlayerId];
-            let lq = p.nextDir; if (lq === Direction.STOP) lq = p.dir;
-            const opp = (lq === Direction.UP && nd === Direction.DOWN) ||
-                        (lq === Direction.DOWN && nd === Direction.UP) ||
-                        (lq === Direction.LEFT && nd === Direction.RIGHT) ||
-                        (lq === Direction.RIGHT && nd === Direction.LEFT);
-            if (!opp) p.nextDir = nd;
-        } else if (netRole === NetRole.CLIENT && clientDC && clientDC.readyState === 'open') {
-            const buf = new ArrayBuffer(1);
-            const v = new Uint8Array(buf);
-            v[0] = nd;
-            sendPkt(clientDC, PacketType.PLAYER_INPUT, buf);
+function processInput(){
+    if(appState!==AppState.PLAYING||gameState.gameOver)return;
+    let nd=Direction.STOP;
+    if(keys['ArrowUp']||keys['w']||keys['W'])nd=Direction.UP;
+    else if(keys['ArrowDown']||keys['s']||keys['S'])nd=Direction.DOWN;
+    else if(keys['ArrowLeft']||keys['a']||keys['A'])nd=Direction.LEFT;
+    else if(keys['ArrowRight']||keys['d']||keys['D'])nd=Direction.RIGHT;
+    // Touch direction (set by dpad)
+    if(touchDir!==Direction.STOP)nd=touchDir;
+    if(nd!==Direction.STOP){
+        if(netRole===NetRole.HOST&&localPlayerId>=0){
+            const p=gameState.players[localPlayerId];
+            let lq=p.nextDir;if(lq===Direction.STOP)lq=p.dir;
+            const opp=(lq===Direction.UP&&nd===Direction.DOWN)||
+                      (lq===Direction.DOWN&&nd===Direction.UP)||
+                      (lq===Direction.LEFT&&nd===Direction.RIGHT)||
+                      (lq===Direction.RIGHT&&nd===Direction.LEFT);
+            if(!opp)p.nextDir=nd;
+        }else if(netRole===NetRole.CLIENT&&clientDC&&clientDC.readyState==='open'){
+            const buf=new ArrayBuffer(1);
+            const v=new Uint8Array(buf);
+            v[0]=nd;
+            sendPkt(clientDC,PacketType.PLAYER_INPUT,buf);
         }
     }
 }
+
+// ============================================================
+// INPUT: TOUCH D-PAD
+// ============================================================
+let touchDir=Direction.STOP;
+const dpadBtns=document.querySelectorAll('.dpad-btn');
+
+function setTouchDir(dir){
+    touchDir=dir;
+    // Highlight the active dpad button
+    dpadBtns.forEach(b=>{
+        if(parseInt(b.dataset.dir)===dir)b.classList.add('pressed');
+        else b.classList.remove('pressed');
+    });
+}
+function clearTouchDir(){
+    touchDir=Direction.STOP;
+    dpadBtns.forEach(b=>b.classList.remove('pressed'));
+}
+
+dpadBtns.forEach(btn=>{
+    const dir=parseInt(btn.dataset.dir);
+    // Touch events
+    btn.addEventListener('touchstart',(e)=>{
+        e.preventDefault();
+        setTouchDir(dir);
+    },{passive:false});
+    btn.addEventListener('touchend',(e)=>{
+        e.preventDefault();
+        clearTouchDir();
+    },{passive:false});
+    btn.addEventListener('touchcancel',(e)=>{
+        clearTouchDir();
+    });
+    // Mouse events (for desktop testing of dpad)
+    btn.addEventListener('mousedown',(e)=>{
+        e.preventDefault();
+        setTouchDir(dir);
+    });
+    btn.addEventListener('mouseup',(e)=>{
+        e.preventDefault();
+        clearTouchDir();
+    });
+    btn.addEventListener('mouseleave',(e)=>{
+        clearTouchDir();
+    });
+});
+
+// Prevent scrolling when using the controller area
+document.getElementById('controller-area').addEventListener('touchmove',(e)=>{
+    e.preventDefault();
+},{passive:false});
+
+// ============================================================
+// ACTION BUTTON WIRING
+// ============================================================
+document.getElementById('btn-start-game').addEventListener('click',onActionStart);
+document.getElementById('btn-start-game').addEventListener('touchend',(e)=>{e.preventDefault();onActionStart();});
+document.getElementById('btn-restart-game').addEventListener('click',onActionRestart);
+document.getElementById('btn-restart-game').addEventListener('touchend',(e)=>{e.preventDefault();onActionRestart();});
+document.getElementById('btn-quit-game').addEventListener('click',onActionQuit);
+document.getElementById('btn-quit-game').addEventListener('touchend',(e)=>{e.preventDefault();onActionQuit();});
+
+// ============================================================
+// RESIZE HANDLER
+// ============================================================
+window.addEventListener('resize',()=>{
+    resizeGame();
+    renderDispatch();
+});
 
 // ============================================================
 // GAME LOOP
 // ============================================================
-let lastTickTime = performance.now();
-let lastFrameTime = performance.now();
-let tickAccumulator = 0;
+let lastTickTime=performance.now();
+let lastFrameTime=performance.now();
+let tickAccumulator=0;
 
-function gameLoop(timestamp) {
+function gameLoop(timestamp){
     processInput();
-    const dt = (timestamp - lastTickTime) / 1000;
-    lastTickTime = timestamp;
-    tickAccumulator += dt;
-    while (tickAccumulator >= 1.0 / TICK_RATE) { tick(); tickAccumulator -= 1.0 / TICK_RATE; }
-    if (timestamp - lastFrameTime >= TARGET_FRAME) { renderDispatch(); lastFrameTime = timestamp; }
+    const dt=(timestamp-lastTickTime)/1000;
+    lastTickTime=timestamp;
+    tickAccumulator+=dt;
+    while(tickAccumulator>=1.0/TICK_RATE){tick();tickAccumulator-=1.0/TICK_RATE;}
+    if(timestamp-lastFrameTime>=TARGET_FRAME){renderDispatch();lastFrameTime=timestamp;}
     requestAnimationFrame(gameLoop);
 }
 
 // ============================================================
 // INIT
 // ============================================================
-function init() {
-    for (let i = 0; i < MAX_PLAYERS; i++)
-        gameState.players[i] = { body:[], dir:Direction.RIGHT, score:0, alive:false, active:false, nextDir:Direction.STOP };
-    appState = AppState.MENU; netRole = NetRole.NONE; localPlayerId = -1; activePlayerCount = 0;
+function init(){
+    for(let i=0;i<MAX_PLAYERS;i++)
+        gameState.players[i]={body:[],dir:Direction.RIGHT,score:0,alive:false,active:false,nextDir:Direction.STOP};
+    appState=AppState.MENU;netRole=NetRole.NONE;localPlayerId=-1;activePlayerCount=0;
+    resizeGame();
     showMenu();
     requestAnimationFrame(gameLoop);
 }
 init();
 
 // Lobby UI polling
-setInterval(() => {
-    if (appState === AppState.LOBBY) {
-        const startHint = document.getElementById('start-hint');
-        if (netRole === NetRole.HOST && activePlayerCount >= 1) {
-            startHint.classList.toggle('hidden', document.getElementById('host-invite-row').style.display === 'none');
-        } else {
-            startHint.classList.add('hidden');
-        }
+setInterval(()=>{
+    if(appState===AppState.LOBBY){
+        const startHint=document.getElementById('start-hint');
+        if(netRole===NetRole.HOST&&activePlayerCount>=1){
+            startHint.classList.toggle('hidden',document.getElementById('host-invite-row').style.display==='none');
+        }else{startHint.classList.add('hidden');}
     }
-}, 500);
+    // Keep controller buttons in sync
+    updateControllerUI();
+},500);
 
-console.log('Snake 4P Multiplayer loaded!');
+console.log('Snake 4P Multiplayer loaded! Mobile controls ready.');
 </script>
 </body>
 </html>
