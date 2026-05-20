@@ -209,6 +209,9 @@ body {
         <div id="menu-overlay" class="overlay">
             <div class="title-text">SNAKE</div>
             <div class="subtitle">4 PLAYER MULTIPLAYER (port 8888)</div>
+            <label style="color:#CCCCCC;font-size:clamp(11px,2.2vw,13px);margin:8px 0;cursor:pointer;display:flex;align-items:center;gap:8px;">
+                <input type="checkbox" id="force-turn-checkbox" checked style="accent-color:#CC88FF;width:18px;height:18px;cursor:pointer;"> Always use TURN relay
+            </label>
             <button class="menu-btn" onclick="createGame()">1 - CREATE GAME (HOST)</button>
             <button class="menu-btn" onclick="showJoinUI()">2 - JOIN GAME</button>
             <button class="menu-btn" onclick="showHelp()">3 - HOW TO PLAY</button>
@@ -258,6 +261,8 @@ body {
             <div id="gameover-winner" class="gameover-winner"></div>
         </div>
     </div>
+
+    <div id="conn-indicator" style="flex:0 0 auto;color:#8888AA;font-size:clamp(10px,2vw,12px);text-align:center;min-height:18px;padding:2px 8px;background:#0A0A16;border-top:1px solid #16213E;"></div>
 
     <!-- SCORE BAR -->
     <div id="scorebar" class="hidden-ctrl">
@@ -418,8 +423,19 @@ const STUN_CONFIG={'iceServers':[
     {'urls':'stun:stun1.l.google.com:19302'},
     {'urls':'stun:stun2.l.google.com:19302'},
     {'urls':'stun:stun3.l.google.com:19302'},
-    {'urls':'stun:stun4.l.google.com:19302'}
+    {'urls':'stun:stun4.l.google.com:19302'},
+    {'urls':'stun:stun.relay.metered.ca:80'},
+    {'urls':'turn:global.relay.metered.ca:80','username':'b91725d7ea7bd065ec4541ce','credential':'mtiQ613jx/8DXIW0'},
+    {'urls':'turn:global.relay.metered.ca:80?transport=tcp','username':'b91725d7ea7bd065ec4541ce','credential':'mtiQ613jx/8DXIW0'},
+    {'urls':'turn:global.relay.metered.ca:443','username':'b91725d7ea7bd065ec4541ce','credential':'mtiQ613jx/8DXIW0'},
+    {'urls':'turns:global.relay.metered.ca:443?transport=tcp','username':'b91725d7ea7bd065ec4541ce','credential':'mtiQ613jx/8DXIW0'}
 ]};
+let forceTurnRelay=true;
+function getIceConfig(){
+    const cb=document.getElementById('force-turn-checkbox');
+    if(cb)forceTurnRelay=cb.checked;
+    return Object.assign({iceTransportPolicy:forceTurnRelay?'relay':'all'},STUN_CONFIG);
+}
 let hostPC=null,hostDC=null,clientPC=null,clientDC=null;
 let clientChannels=[];
 let sdpBuffer='';
@@ -655,22 +671,21 @@ async function hostCreateOffer(){
     if(hostPC&&hostPC.iceConnectionState!=='closed'&&hostPC.iceConnectionState!=='failed'){
         console.warn('hostCreateOffer: Overwriting existing pending hostPC');
     }
-    const pc=new RTCPeerConnection(STUN_CONFIG);
+    const pc=new RTCPeerConnection(getIceConfig());
     const dc=pc.createDataChannel('game');
     hostPC=pc;hostDC=dc;
     pc.oniceconnectionstatechange=()=>{
         console.log('HOST ICE state:',pc.iceConnectionState);
         switch(pc.iceConnectionState){
             case 'new':case 'checking':setIceStatus('\u{1F7E1} Checking connection...','#FFBB00');break;
-            case 'connected':setIceStatus('\u{1F7E2} ICE Connected!','#00FF88');break;
-            case 'failed':setIceStatus('\u{1F534} ICE Failed - may need TURN server','#FF4444');setConnectionStatus('ICE connection failed.');break;
+            case 'connected':setIceStatus('\u{1F7E2} ICE Connected!','#00FF88');setTimeout(()=>detectTurnRelay(pc),500);break;
+            case 'failed':setIceStatus('\u{1F534} ICE Failed (retrying...)','#FF4444');setConnectionStatus('ICE connection failed.');break;
             case 'disconnected':setIceStatus('\u{1F7E0} Disconnected - trying to reconnect...','#FFBB00');break;
             case 'closed':setIceStatus('\u{26AA} Connection closed','#8888AA');break;
         }
     };
     pc.onicecandidateerror=(e)=>{
         console.warn('HOST ICE candidate error:',e);
-        setIceStatus('\u{26A0} ICE candidate error','#FFBB00');
     };
     setupHostDataChannel(dc);
     const sdp=await new Promise((resolve,reject)=>{
@@ -692,7 +707,7 @@ async function hostCreateOffer(){
     return sdp;
 }
 async function clientJoin(offerSdp){
-    const pc=new RTCPeerConnection(STUN_CONFIG);
+    const pc=new RTCPeerConnection(getIceConfig());
     pc.ondatachannel=(event)=>{
         clientDC=event.channel;
         clientDC.onopen=()=>{netRole=NetRole.CLIENT;setConnectionStatus('Connected to host!');updateLobbyUI();updateControllerUI();};
@@ -704,7 +719,7 @@ async function clientJoin(offerSdp){
         console.log('CLIENT ICE state:',pc.iceConnectionState);
         switch(pc.iceConnectionState){
             case 'new':case 'checking':setIceStatus('\u{1F7E1} Checking connection...','#FFBB00');break;
-            case 'connected':setIceStatus('\u{1F7E2} ICE Connected!','#00FF88');break;
+            case 'connected':setIceStatus('\u{1F7E2} ICE Connected!','#00FF88');setTimeout(()=>detectTurnRelay(pc),500);break;
             case 'failed':setIceStatus('\u{1F534} ICE Failed - may need TURN server','#FF4444');setConnectionStatus('ICE connection failed.');break;
             case 'disconnected':setIceStatus('\u{1F7E0} Disconnected - trying to reconnect...','#FFBB00');break;
             case 'closed':setIceStatus('\u{26AA} Connection closed','#8888AA');break;
@@ -712,7 +727,6 @@ async function clientJoin(offerSdp){
     };
     pc.onicecandidateerror=(e)=>{
         console.warn('CLIENT ICE candidate error:',e);
-        setIceStatus('\u{26A0} ICE candidate error','#FFBB00');
     };
     const sdp=await new Promise((resolve,reject)=>{
         let gatheringDone=false;
@@ -783,15 +797,32 @@ function setConnectionStatus(msg){
     if(el2)el2.textContent=msg;
 }
 function setIceStatus(msg,color){
-    const el=document.getElementById('ice-status');
-    if(!el)return;
-    el.textContent=msg;
-    el.style.color=color||'#8888AA';
-    el.style.background=color?(color==='#FF4444'?'rgba(255,68,68,0.1)':color==='#00FF88'?'rgba(0,255,136,0.08)':color==='#FFBB00'?'rgba(255,187,0,0.08)':'transparent'):'transparent';
+    const elLobby=document.getElementById('ice-status');
+    const elGlobal=document.getElementById('conn-indicator');
+    if(elLobby){elLobby.textContent=msg;elLobby.style.color=color||'#8888AA';elLobby.style.background=color?(color==='#FF4444'?'rgba(255,68,68,0.1)':color==='#00FF88'?'rgba(0,255,136,0.08)':color==='#FFBB00'?'rgba(255,187,0,0.08)':'transparent'):'transparent';}
+    if(elGlobal){elGlobal.textContent=msg;elGlobal.style.color=color||'#8888AA';elGlobal.style.background='transparent';}
 }
 function clearIceStatus(){
-    const el=document.getElementById('ice-status');
-    if(el){el.textContent='';el.style.color='';el.style.background='';}
+    const elLobby=document.getElementById('ice-status');
+    const elGlobal=document.getElementById('conn-indicator');
+    if(elLobby){elLobby.textContent='';elLobby.style.color='';elLobby.style.background='';}
+    if(elGlobal){elGlobal.textContent='';elGlobal.style.color='';}
+}
+async function detectTurnRelay(pc){
+    if(!pc||pc.iceConnectionState!=='connected')return;
+    try{
+        const stats=await pc.getStats();
+        let isRelay=false;
+        stats.forEach(r=>{
+            if(r.type==='candidate-pair'&&r.state==='succeeded'&&r.nominated){
+                const local=stats.get(r.localCandidateId);
+                if(local&&(local.candidateType==='relay'||local.relayProtocol))isRelay=true;
+            }
+        });
+        if(forceTurnRelay)setIceStatus('\u{1F7E3} Connected (TURN relay - forced)','#CC88FF');
+        else if(isRelay)setIceStatus('\u{1F7E3} Connected (TURN relay)','#CC88FF');
+        else setIceStatus('\u{1F7E2} Connected (Direct)','#00FF88');
+    }catch(e){/*stats not available yet*/}
 }
 
 // ============================================================
