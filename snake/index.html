@@ -430,7 +430,7 @@ const CHAR_W=5,CHAR_H=7;
 const Direction={STOP:0,UP:1,DOWN:2,LEFT:3,RIGHT:4};
 const AppState={MENU:0,LOBBY:1,PLAYING:2};
 const NetRole={NONE:0,HOST:1,CLIENT:2};
-const PacketType={JOIN_ACCEPT:0,PLAYER_INPUT:1,GAME_STATE:2,LOBBY_STATE:3,JOIN_REQUEST:4};
+const PacketType={JOIN_ACCEPT:0,PLAYER_INPUT:1,GAME_STATE:2,LOBBY_STATE:3,JOIN_REQUEST:4,HEARTBEAT:5,HEARTBEAT_ACK:6,PLAYER_LEAVE:7};
 
 // ============================================================
 // CANVAS SETUP
@@ -482,10 +482,14 @@ const ICE_CONFIG={'iceServers':[
     {'urls':'turn:global.relay.metered.ca:443','username':'b91725d7ea7bd065ec4541ce','credential':'mtiQ613jx/8DXIW0'}
 ]};
 let hostPeer=null,clientPeer=null;
-let hostConnections=[]; // DataConnection[] — one per connected client
+let hostConnections=new Array(MAX_PLAYERS).fill(null); // slot-indexed — index 1-3 map to playerId 1-3
 let clientConnection=null; // single DataConnection from client to host
 let pendingConnection=null; // connection before user clicks JOIN
 let playerConnectionType=new Array(MAX_PLAYERS).fill('');
+let lastAckTick=new Array(MAX_PLAYERS).fill(-1);
+let tickCounter=0;
+let lastGameStateTime=0;
+let playerDisconnected=new Array(MAX_PLAYERS).fill(false);
 
 // ============================================================
 // FRIENDLY PEER ID GENERATION
@@ -595,10 +599,25 @@ function updatePlayer(id){
 }
 function tick(){
     if(netRole!==NetRole.HOST||appState!==AppState.PLAYING)return;
+    tickCounter++;
     for(let i=0;i<MAX_PLAYERS;i++)if(gameState.players[i].alive)updatePlayer(i);
     let alive=0;for(const p of gameState.players)if(p.alive)alive++;
     if(alive===0&&!gameState.gameOver)gameState.gameOver=true;
     sendGameState();
+    // Heartbeat: send every 50 ticks (5s at 10 ticks/sec)
+    if(tickCounter%50===0){
+        for(let i=1;i<MAX_PLAYERS;i++){
+            if(hostConnections[i]&&gameState.players[i].active)
+                sendPkt(hostConnections[i],PacketType.HEARTBEAT,null);
+        }
+    }
+    // Heartbeat timeout check: every 10 ticks (1s)
+    if(tickCounter%10===0){
+        for(let i=1;i<MAX_PLAYERS;i++){
+            if(hostConnections[i]&&lastAckTick[i]>=0&&tickCounter-lastAckTick[i]>100)
+                handlePlayerDisconnect(i);
+        }
+    }
 }
 
 // ============================================================
@@ -627,7 +646,7 @@ function sendGameState(){
         v[o++]=p.active?1:0;v[o++]=p.alive?1:0;v[o++]=p.score;v[o++]=p.dir;v[o++]=p.body.length;
         for(const seg of p.body){v[o++]=seg.x;v[o++]=seg.y;}
     }
-    for(let i=0;i<hostConnections.length;i++){
+    for(let i=1;i<hostConnections.length;i++){
         if(hostConnections[i]&&hostConnections[i].open)sendPkt(hostConnections[i],PacketType.GAME_STATE,buf);
     }
 }
@@ -644,20 +663,19 @@ function parseGameState(data){
         for(let b=0;b<bl;b++){if(o+1>=v.length)break;p.body.push({x:v[o++],y:v[o++]});}
     }
 }
-function setupHostDataConnection(conn){
+function setupHostDataConnection(conn, slot){
+    const playerId=slot;
     let joined=false;
     conn.on('data',(data)=>{
         const v=new Uint8Array(data);
         if(v.length<1)return;
         const type=v[0];const d=v.slice(1);
         if(type===PacketType.JOIN_REQUEST&&!joined){
-            if(hostConnections.length>=MAX_PLAYERS-1)return;
+            if(gameState.players[playerId].active)return;
             joined=true;
-            const slot=hostConnections.length;
-            const playerId=slot+1;
-            hostConnections.push(conn);
             gameState.players[playerId].active=true;
             activePlayerCount++;
+            lastAckTick[slot]=tickCounter;
             if(appState===AppState.LOBBY)spawnPlayer(playerId);
             const buf=new ArrayBuffer(1);
             const v2=new Uint8Array(buf);
@@ -673,38 +691,53 @@ function setupHostDataConnection(conn){
         if(!joined)return;
         if(type===PacketType.PLAYER_INPUT&&d.length>=1){
             const dir=d[0];
-            const idx=hostConnections.indexOf(conn);
-            if(idx>=0){
-                const pid=idx+1;
-                const p=gameState.players[pid];
-                if(p&&p.alive){
-                    let lq=p.nextDir;
-                    if(lq===Direction.STOP)lq=p.dir;
-                    const opp=(lq===Direction.UP&&dir===Direction.DOWN)||
-                             (lq===Direction.DOWN&&dir===Direction.UP)||
-                             (lq===Direction.LEFT&&dir===Direction.RIGHT)||
-                             (lq===Direction.RIGHT&&dir===Direction.LEFT);
-                    if(!opp)p.nextDir=dir;
-                }
+            const p=gameState.players[playerId];
+            if(p&&p.alive){
+                let lq=p.nextDir;
+                if(lq===Direction.STOP)lq=p.dir;
+                const opp=(lq===Direction.UP&&dir===Direction.DOWN)||
+                         (lq===Direction.DOWN&&dir===Direction.UP)||
+                         (lq===Direction.LEFT&&dir===Direction.RIGHT)||
+                         (lq===Direction.RIGHT&&dir===Direction.LEFT);
+                if(!opp)p.nextDir=dir;
             }
+            return;
+        }
+        if(type===PacketType.HEARTBEAT_ACK){
+            lastAckTick[slot]=tickCounter;
+            return;
+        }
+        if(type===PacketType.PLAYER_LEAVE){
+            handlePlayerDisconnect(slot);
+            return;
         }
     });
     conn.on('close',()=>{
-        if(joined){
-            const idx=hostConnections.indexOf(conn);
-            if(idx>=0){
-                hostConnections.splice(idx,1);
-                const pid=idx+1;
-                gameState.players[pid].active=false;
-                gameState.players[pid].alive=false;
-                gameState.players[pid].body=[];
-                playerConnectionType[pid]='';
-                activePlayerCount--;
-                updateLobbyUI();
-                broadcastLobbyState();
-            }
-        }
+        handlePlayerDisconnect(slot);
     });
+}
+
+function handlePlayerDisconnect(slot){
+    if(slot<1||slot>=MAX_PLAYERS)return;
+    if(playerDisconnected[slot])return;
+    playerDisconnected[slot]=true;
+    if(hostConnections[slot]){
+        const conn=hostConnections[slot];
+        hostConnections[slot]=null;
+        try{conn.close();}catch(e){}
+    }
+    if(gameState.players[slot].active){
+        gameState.players[slot].active=false;
+        gameState.players[slot].alive=false;
+        gameState.players[slot].body=[];
+        playerConnectionType[slot]='';
+        lastAckTick[slot]=-1;
+        activePlayerCount--;
+        if(appState===AppState.LOBBY){
+            updateLobbyUI();
+            broadcastLobbyState();
+        }
+    }
 }
 function broadcastLobbyState(){
     const buf=new ArrayBuffer(1+MAX_PLAYERS*2);
@@ -715,7 +748,7 @@ function broadcastLobbyState(){
         const ct=playerConnectionType[i];
         v[1+MAX_PLAYERS+i]=ct==='direct'?1:(ct==='relay'?2:0);
     }
-    for(let i=0;i<hostConnections.length;i++){
+    for(let i=1;i<hostConnections.length;i++){
         if(hostConnections[i]&&hostConnections[i].open){
             hostConnections[i].send(buf);
         }
@@ -737,6 +770,7 @@ function onClientMessage(raw){
         updateLobbyUI();
         updateControllerUI();
     }else if(type===PacketType.GAME_STATE&&data.length>=4){
+        lastGameStateTime=Date.now();
         parseGameState(data);
         if(appState!==AppState.PLAYING){
             appState=AppState.PLAYING;
@@ -757,11 +791,23 @@ function onClientMessage(raw){
         }
         activePlayerCount=count;
         updateLobbyUI();
+    }else if(type===PacketType.HEARTBEAT){
+        sendPkt(clientConnection,PacketType.HEARTBEAT_ACK,null);
+    }else if(type===PacketType.PLAYER_LEAVE){
+        setStatusMsg('Host disconnected',300);
+        cleanupClient();
+        appState=AppState.MENU;
+        showMenu();
+        updateControllerUI();
     }
 }
 function cleanupHost(){
-    for(const conn of hostConnections){try{conn.close();}catch(e){}}
-    hostConnections=[];
+    for(let i=1;i<hostConnections.length;i++){
+        if(hostConnections[i]){try{hostConnections[i].close();}catch(e){}}
+        hostConnections[i]=null;
+    }
+    lastAckTick=new Array(MAX_PLAYERS).fill(-1);
+    playerDisconnected=new Array(MAX_PLAYERS).fill(false);
     if(hostPeer){try{hostPeer.destroy();}catch(e){}}hostPeer=null;netRole=NetRole.NONE;
     activePlayerCount=0;localPlayerId=-1;
     playerConnectionType=new Array(MAX_PLAYERS).fill('');
@@ -910,7 +956,14 @@ async function createGame(){
     try{
         const result=await createPeerWithFriendlyId();
         hostPeer=result.peer;
-        hostPeer.on('connection',(conn)=>{setupHostDataConnection(conn);});
+        hostPeer.on('connection',(conn)=>{
+            let slot=-1;
+            for(let i=1;i<MAX_PLAYERS;i++){if(!hostConnections[i]){slot=i;break;}}
+            if(slot===-1){try{conn.close();}catch(e){}return;}
+            hostConnections[slot]=conn;
+            playerDisconnected[slot]=false;
+            setupHostDataConnection(conn,slot);
+        });
         hostPeer.on('error',(err)=>{
             console.error('PeerJS error:',err);
             setConnectionStatus('Error: '+err.type);
@@ -1348,6 +1401,29 @@ window.addEventListener('resize',()=>{
 });
 
 // ============================================================
+// BROWSER CLOSE DETECTION (best-effort)
+// ============================================================
+window.addEventListener('beforeunload',()=>{
+    if(netRole===NetRole.CLIENT&&clientConnection&&clientConnection.open){
+        try{
+            const buf=new ArrayBuffer(1);
+            const v=new Uint8Array(buf);
+            v[0]=PacketType.PLAYER_LEAVE;
+            clientConnection.send(buf);
+        }catch(e){}
+    }else if(netRole===NetRole.HOST){
+        const buf=new ArrayBuffer(1);
+        const v=new Uint8Array(buf);
+        v[0]=PacketType.PLAYER_LEAVE;
+        for(let i=1;i<MAX_PLAYERS;i++){
+            if(hostConnections[i]&&hostConnections[i].open){
+                try{hostConnections[i].send(buf);}catch(e){}
+            }
+        }
+    }
+});
+
+// ============================================================
 // GAME LOOP
 // ============================================================
 let lastTickTime=performance.now();
@@ -1372,6 +1448,11 @@ function init(){
         gameState.players[i]={body:[],dir:Direction.RIGHT,score:0,alive:false,active:false,nextDir:Direction.STOP};
     appState=AppState.MENU;netRole=NetRole.NONE;localPlayerId=-1;activePlayerCount=0;
     playerConnectionType=new Array(MAX_PLAYERS).fill('');
+    lastAckTick=new Array(MAX_PLAYERS).fill(-1);
+    tickCounter=0;
+    lastGameStateTime=0;
+    playerDisconnected=new Array(MAX_PLAYERS).fill(false);
+    hostConnections=new Array(MAX_PLAYERS).fill(null);
     resizeGame();
     showMenu();
     requestAnimationFrame(gameLoop);
@@ -1386,6 +1467,16 @@ setInterval(()=>{
         if(netRole===NetRole.HOST&&activePlayerCount>=1){
             startHint.classList.toggle('hidden',document.getElementById('host-invite-row').classList.contains('hidden'));
         }else{startHint.classList.add('hidden');}
+    }
+    // Client: detect host disconnect (15s without GAME_STATE)
+    if(appState===AppState.PLAYING&&netRole===NetRole.CLIENT){
+        if(Date.now()-lastGameStateTime>15000){
+            setStatusMsg('Host disconnected',300);
+            cleanupClient();
+            appState=AppState.MENU;
+            showMenu();
+            updateControllerUI();
+        }
     }
     // Keep controller buttons in sync
     updateControllerUI();
