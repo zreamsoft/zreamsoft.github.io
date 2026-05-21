@@ -430,7 +430,7 @@ const CHAR_W=5,CHAR_H=7;
 const Direction={STOP:0,UP:1,DOWN:2,LEFT:3,RIGHT:4};
 const AppState={MENU:0,LOBBY:1,PLAYING:2};
 const NetRole={NONE:0,HOST:1,CLIENT:2};
-const PacketType={JOIN_ACCEPT:0,PLAYER_INPUT:1,GAME_STATE:2,LOBBY_STATE:3};
+const PacketType={JOIN_ACCEPT:0,PLAYER_INPUT:1,GAME_STATE:2,LOBBY_STATE:3,JOIN_REQUEST:4};
 
 // ============================================================
 // CANVAS SETUP
@@ -484,7 +484,24 @@ const ICE_CONFIG={'iceServers':[
 let hostPeer=null,clientPeer=null;
 let hostConnections=[]; // DataConnection[] — one per connected client
 let clientConnection=null; // single DataConnection from client to host
+let pendingConnection=null; // connection before user clicks JOIN
 let playerConnectionType=new Array(MAX_PLAYERS).fill('');
+
+// ============================================================
+// FRIENDLY PEER ID GENERATION
+// ============================================================
+const ADJECTIVES='cool fast bold calm wise keen pure safe warm mild dark soft high low true glad kind deep rare slim busy free snug wild'.split(' ');
+const NOUNS='panda tiger eagle otter fox bear wolf deer hawk owl seal mole dove lynx hare kite loon ram cat elk doe eel bat'.split(' ');
+function randomSuffix(n){
+    const c='abcdefghijklmnopqrstuvwxyz0123456789';
+    let s='';for(let i=0;i<n;i++)s+=c[Math.floor(Math.random()*c.length)];
+    return s;
+}
+function generateFriendlyId(){
+    const adj=ADJECTIVES[Math.floor(Math.random()*ADJECTIVES.length)];
+    const noun=NOUNS[Math.floor(Math.random()*NOUNS.length)];
+    return adj+'-'+noun+'-'+randomSuffix(4);
+}
 
 // ============================================================
 // DRAWING HELPERS
@@ -628,27 +645,32 @@ function parseGameState(data){
     }
 }
 function setupHostDataConnection(conn){
-    conn.on('open',()=>{
-        const slot=hostConnections.length;
-        const playerId=slot+1;
-        hostConnections.push(conn);
-        gameState.players[playerId].active=true;
-        activePlayerCount++;
-        if(appState===AppState.LOBBY)spawnPlayer(playerId);
-        const buf=new ArrayBuffer(1);
-        const v=new Uint8Array(buf);
-        v[0]=playerId;
-        sendPkt(conn,PacketType.JOIN_ACCEPT,buf);
-        playerConnectionType[playerId]='direct';
-        updateLobbyUI();
-        broadcastLobbyState();
-        setConnectionStatus('Player '+(playerId+1)+' connected!');
-        document.getElementById('host-invite-row').classList.add('hidden');
-    });
+    let joined=false;
     conn.on('data',(data)=>{
         const v=new Uint8Array(data);
         if(v.length<1)return;
         const type=v[0];const d=v.slice(1);
+        if(type===PacketType.JOIN_REQUEST&&!joined){
+            if(hostConnections.length>=MAX_PLAYERS-1)return;
+            joined=true;
+            const slot=hostConnections.length;
+            const playerId=slot+1;
+            hostConnections.push(conn);
+            gameState.players[playerId].active=true;
+            activePlayerCount++;
+            if(appState===AppState.LOBBY)spawnPlayer(playerId);
+            const buf=new ArrayBuffer(1);
+            const v2=new Uint8Array(buf);
+            v2[0]=playerId;
+            sendPkt(conn,PacketType.JOIN_ACCEPT,buf);
+            playerConnectionType[playerId]='direct';
+            updateLobbyUI();
+            broadcastLobbyState();
+            setConnectionStatus('Player '+(playerId+1)+' connected!');
+            document.getElementById('host-invite-row').classList.add('hidden');
+            return;
+        }
+        if(!joined)return;
         if(type===PacketType.PLAYER_INPUT&&d.length>=1){
             const dir=d[0];
             const idx=hostConnections.indexOf(conn);
@@ -668,17 +690,19 @@ function setupHostDataConnection(conn){
         }
     });
     conn.on('close',()=>{
-        const idx=hostConnections.indexOf(conn);
-        if(idx>=0){
-            hostConnections.splice(idx,1);
-            const pid=idx+1;
-            gameState.players[pid].active=false;
-            gameState.players[pid].alive=false;
-            gameState.players[pid].body=[];
-            playerConnectionType[pid]='';
-            activePlayerCount--;
-            updateLobbyUI();
-            broadcastLobbyState();
+        if(joined){
+            const idx=hostConnections.indexOf(conn);
+            if(idx>=0){
+                hostConnections.splice(idx,1);
+                const pid=idx+1;
+                gameState.players[pid].active=false;
+                gameState.players[pid].alive=false;
+                gameState.players[pid].body=[];
+                playerConnectionType[pid]='';
+                activePlayerCount--;
+                updateLobbyUI();
+                broadcastLobbyState();
+            }
         }
     });
 }
@@ -705,8 +729,13 @@ function onClientMessage(raw){
         localPlayerId=data[0];
         gameState.players[localPlayerId].active=true;
         activePlayerCount++;
+        netRole=NetRole.CLIENT;
         setStatusMsg('You are P'+(localPlayerId+1),300);
+        setConnectionStatus('Connected to host!');
+        document.getElementById('join-area').classList.add('hidden');
+        pendingConnection=null;
         updateLobbyUI();
+        updateControllerUI();
     }else if(type===PacketType.GAME_STATE&&data.length>=4){
         parseGameState(data);
         if(appState!==AppState.PLAYING){
@@ -740,6 +769,7 @@ function cleanupHost(){
     document.getElementById('host-invite-row').classList.add('hidden');
 }
 function cleanupClient(){
+    if(pendingConnection){try{pendingConnection.close();}catch(e){}pendingConnection=null;}
     if(clientConnection){try{clientConnection.close();}catch(e){}clientConnection=null;}
     if(clientPeer){try{clientPeer.destroy();}catch(e){}}clientPeer=null;
     netRole=NetRole.NONE;localPlayerId=-1;
@@ -845,6 +875,26 @@ function onActionQuit(){
     updateControllerUI();
 }
 
+// ===== Friendly Peer ID with retry =====
+function createPeerWithFriendlyId(){
+    return new Promise((resolve,reject)=>{
+        let attempts=0;
+        function tryCreate(){
+            const id=generateFriendlyId();
+            const p=new Peer(id,{config: ICE_CONFIG});
+            p.on('open',()=>resolve({peer:p, id:p.id}));
+            p.on('error',(err)=>{
+                if(err.type==='id-taken'&&attempts<5){
+                    attempts++;
+                    p.destroy();
+                    tryCreate();
+                }else{reject(err);}
+            });
+        }
+        tryCreate();
+    });
+}
+
 // ===== CREATE GAME (HOST) =====
 async function createGame(){
     cleanupAll();
@@ -857,19 +907,23 @@ async function createGame(){
     updateLobbyUI();
     updateControllerUI();
 
-    hostPeer=new Peer({config: ICE_CONFIG});
-    hostPeer.on('open',(id)=>{
-        setConnectionStatus('Your game ID: '+id);
-        const link=window.location.origin+window.location.pathname+'?join='+id;
+    try{
+        const result=await createPeerWithFriendlyId();
+        hostPeer=result.peer;
+        hostPeer.on('connection',(conn)=>{setupHostDataConnection(conn);});
+        hostPeer.on('error',(err)=>{
+            console.error('PeerJS error:',err);
+            setConnectionStatus('Error: '+err.type);
+        });
+        setConnectionStatus('Your game ID: '+result.id);
+        const link=window.location.origin+window.location.pathname+'?join='+result.id;
         document.getElementById('invite-link-input').value=link;
         document.getElementById('host-invite-row').classList.remove('hidden');
         document.getElementById('lobby-wait-msg').textContent='Share the invite link with friends!';
-    });
-    hostPeer.on('connection',(conn)=>{setupHostDataConnection(conn);});
-    hostPeer.on('error',(err)=>{
-        console.error('PeerJS error:',err);
-        setConnectionStatus('Error: '+err.type);
-    });
+    }catch(e){
+        console.error('Failed to create peer:',e);
+        setConnectionStatus('Failed to create game. Try again.');
+    }
 
     try{
         const resp=await fetch('https://api.ipify.org?format=json');
@@ -906,8 +960,10 @@ function showJoinUI(){
     document.getElementById('lobby-actions').style.display='none';
     document.getElementById('join-area').classList.remove('hidden');
     document.getElementById('join-input').value='';
+    document.getElementById('join-input').style.display='';
     document.getElementById('join-status').textContent='';
     document.getElementById('btn-join-submit').textContent='Join';
+    document.getElementById('btn-join-submit').disabled=false;
     document.getElementById('btn-join-submit').onclick=manualJoin;
     appState=AppState.LOBBY;netRole=NetRole.NONE;
     updateLobbyUI();
@@ -924,37 +980,60 @@ async function manualJoin(){
         if(j)peerId=j;
     }catch(e){/* not a URL, treat as raw peer ID */}
     document.getElementById('join-status').textContent='Connecting...';
-    await connectToHost(peerId);
+    await connectToHost(peerId, true);
 }
 
-async function connectToHost(peerId){
+async function connectToHost(peerId, autoJoin){
     if(clientPeer){cleanupClient();}
+    pendingConnection=null;
     clientPeer=new Peer({config: ICE_CONFIG});
     clientPeer.on('open',()=>{
         document.getElementById('join-status').textContent='Connecting to host...';
         const conn=clientPeer.connect(peerId);
-        clientConnection=conn;
+        pendingConnection=conn;
         conn.on('open',()=>{
-            netRole=NetRole.CLIENT;
-            setConnectionStatus('Connected to host!');
-            document.getElementById('join-area').classList.add('hidden');
-            updateLobbyUI();
-            updateControllerUI();
+            if(autoJoin){
+                doJoin();
+            }else{
+                document.getElementById('join-status').textContent='Game found! Click JOIN to connect.';
+                document.getElementById('btn-join-submit').textContent='JOIN GAME';
+                document.getElementById('btn-join-submit').disabled=false;
+                document.getElementById('btn-join-submit').onclick=doJoin;
+                document.getElementById('join-input').style.display='none';
+            }
         });
         conn.on('data',onClientMessage);
         conn.on('close',()=>{
-            setStatusMsg('Disconnected from host',300);
-            cleanupClient();
-            appState=AppState.MENU;
-            showMenu();
-            updateControllerUI();
+            if(!clientConnection){
+                document.getElementById('join-status').textContent='Connection lost. The host may have left.';
+                document.getElementById('btn-join-submit').textContent='Cancel';
+                document.getElementById('btn-join-submit').onclick=cancelJoin;
+            }else{
+                setStatusMsg('Disconnected from host',300);
+                cleanupClient();
+                appState=AppState.MENU;
+                showMenu();
+                updateControllerUI();
+            }
         });
     });
     clientPeer.on('error',(err)=>{
         console.error('Client PeerJS error:',err);
-        document.getElementById('join-status').textContent='Connection failed: '+err.type;
+        document.getElementById('join-status').textContent='Game not found: '+err.type;
         cleanupClient();
     });
+}
+
+function doJoin(){
+    const conn=pendingConnection;
+    if(!conn||!conn.open)return;
+    const buf=new ArrayBuffer(1);
+    const v=new Uint8Array(buf);
+    v[0]=PacketType.JOIN_REQUEST;
+    conn.send(buf);
+    clientConnection=conn;
+    document.getElementById('join-status').textContent='Joining game...';
+    document.getElementById('btn-join-submit').disabled=true;
 }
 
 function cancelJoin(){
@@ -977,7 +1056,9 @@ function checkAutoJoin(){
         setTimeout(()=>{
             showJoinUI();
             document.getElementById('join-input').value=joinId;
-            document.getElementById('join-area').classList.add('hidden');
+            document.getElementById('join-input').style.display='none';
+            document.getElementById('btn-join-submit').disabled=true;
+            document.getElementById('btn-join-submit').textContent='Looking...';
             connectToHost(joinId);
         },500);
     }
