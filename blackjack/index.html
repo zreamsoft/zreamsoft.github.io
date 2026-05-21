@@ -437,6 +437,7 @@ let lastAckTick = new Array(MAX_PLAYERS).fill(-1);
 let tickCounter = 0;
 let lastGameStateTime = Date.now();
 let playerDisconnected = new Array(MAX_PLAYERS).fill(false);
+let hostReconnecting = false;
 
 // ============================================================
 // FRIENDLY PEER ID GENERATION
@@ -1086,6 +1087,7 @@ function cleanupHost() {
     }
     lastAckTick = new Array(MAX_PLAYERS).fill(-1);
     playerDisconnected = new Array(MAX_PLAYERS).fill(false);
+    hostReconnecting = false;
     if (hostPeer) { try { hostPeer.destroy(); } catch (e) { } }
     hostPeer = null;
     netRole = NetRole.NONE;
@@ -1351,6 +1353,39 @@ async function createGame() {
             console.error('PeerJS error:', err);
             setConnectionStatus('Error: ' + err.type);
         });
+        hostPeer.on('disconnected', () => {
+            if (hostReconnecting) return;
+            hostReconnecting = true;
+            let attempts = 0;
+            let timer = null;
+            const MAX = 3;
+            const DELAYS = [1000, 2000, 4000];
+
+            const onOpen = () => {
+                if (timer) clearTimeout(timer);
+                hostPeer.off('open', onOpen);
+                if (hostReconnecting) {
+                    hostReconnecting = false;
+                    setConnectionStatus('Reconnected! Your game ID: ' + hostPeer.id);
+                }
+            };
+            hostPeer.on('open', onOpen);
+
+            function retry() {
+                attempts++;
+                setConnectionStatus('Game server connection lost. Reconnecting (' + attempts + '/' + MAX + ')...');
+                hostPeer.reconnect();
+                if (attempts < MAX) {
+                    timer = setTimeout(retry, DELAYS[attempts - 1]);
+                } else {
+                    hostPeer.off('open', onOpen);
+                    hostReconnecting = false;
+                    setConnectionStatus('Could not reconnect to game server. Ask other players to rejoin if needed.');
+                }
+            }
+
+            timer = setTimeout(retry, 1000);
+        });
         setConnectionStatus('Your game ID: ' + result.id);
         const link = window.location.origin + window.location.pathname + '?join=' + result.id;
         document.getElementById('invite-link-input').value = link;
@@ -1511,7 +1546,7 @@ async function connectToHost(peerId, autoJoin) {
                 'disconnected': 'Lost connection to the signaling server',
                 'invalid-id': 'The host ID provided is not valid',
                 'network': 'Network error. Check your internet connection.',
-                'peer-unavailable': 'Host not found. The game may have ended or the signaling server is unreachable.',
+                'peer-unavailable': 'Host not found. The host lost connection to the game server. Ask them to restart the game.',
                 'webrtc': 'WebRTC connection failed. Check your firewall settings.'
             };
             showRetryError(friendly[err.type] || 'Connection failed: ' + err.type);
