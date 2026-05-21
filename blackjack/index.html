@@ -427,6 +427,7 @@ const ICE_CONFIG = { 'iceServers': [
     { 'urls': 'turn:global.relay.metered.ca:80', 'username': 'b91725d7ea7bd065ec4541ce', 'credential': 'mtiQ613jx/8DXIW0' },
     { 'urls': 'turn:global.relay.metered.ca:443', 'username': 'b91725d7ea7bd065ec4541ce', 'credential': 'mtiQ613jx/8DXIW0' }
 ] };
+const SIGNALING_CONFIG = { host: '0.peerjs.com', port: 443, path: '/' };
 let hostPeer = null, clientPeer = null;
 let hostConnections = new Array(MAX_PLAYERS).fill(null);
 let clientConnection = null;
@@ -940,7 +941,6 @@ function setupHostDataConnection(conn, slot) {
             updateLobbyUI();
             broadcastLobbyState();
             setConnectionStatus('Player ' + (playerId + 1) + ' connected!');
-            document.getElementById('host-invite-row').classList.add('hidden');
             return;
         }
         if (!joined) return;
@@ -1245,16 +1245,31 @@ function onActionQuit() {
 function createPeerWithFriendlyId() {
     return new Promise((resolve, reject) => {
         let attempts = 0;
+        const TIMEOUT_MS = 15000;
+        let timedOut = false;
+        const timer = setTimeout(() => {
+            timedOut = true;
+            reject(new Error('Timed out connecting to signaling server'));
+        }, TIMEOUT_MS);
         function tryCreate() {
+            if (timedOut) return;
             const id = generateFriendlyId();
-            const p = new Peer(id, { config: ICE_CONFIG });
-            p.on('open', () => resolve({ peer: p, id: p.id }));
+            const p = new Peer(id, { ...SIGNALING_CONFIG, config: ICE_CONFIG });
+            p.on('open', () => {
+                if (timedOut) { p.destroy(); return; }
+                clearTimeout(timer);
+                resolve({ peer: p, id: p.id });
+            });
             p.on('error', (err) => {
+                if (timedOut) return;
                 if (err.type === 'id-taken' && attempts < 5) {
                     attempts++;
                     p.destroy();
                     tryCreate();
-                } else { reject(err); }
+                } else {
+                    clearTimeout(timer);
+                    reject(err);
+                }
             });
         }
         tryCreate();
@@ -1346,7 +1361,7 @@ async function createGame() {
         document.getElementById('lobby-wait-msg').textContent = 'Share the invite link with friends!';
     } catch (e) {
         console.error('Failed to create peer:', e);
-        setConnectionStatus('Failed to create game. Try again.');
+        setConnectionStatus('Failed to connect to signaling server. Check your internet connection and try again.');
     }
 
     try {
@@ -1414,81 +1429,96 @@ async function connectToHost(peerId, autoJoin) {
     pendingConnection = null;
 
     const CONNECT_TIMEOUT_MS = 20000;
+    const MAX_RETRIES = 2;
+    const RETRY_DELAY_MS = 2000;
     let resolved = false;
+    let retries = 0;
     const showRetryError = (msg) => {
         document.getElementById('join-status').textContent = msg;
         document.getElementById('btn-join-submit').textContent = 'Retry';
         document.getElementById('btn-join-submit').disabled = false;
         document.getElementById('btn-join-submit').onclick = () => connectToHost(peerId, !!autoJoin);
     };
-    const timer = setTimeout(() => {
-        if (resolved) return;
-        resolved = true;
-        cleanupClient();
-        showRetryError('Connection timed out. Could not reach host.');
-    }, CONNECT_TIMEOUT_MS);
 
-    clientPeer = new Peer({ config: ICE_CONFIG });
-    clientPeer.on('open', () => {
-        document.getElementById('join-status').textContent = 'Connecting to host...';
-        const conn = clientPeer.connect(peerId);
-        pendingConnection = conn;
-        conn.on('open', () => {
+    function attempt() {
+        resolved = false;
+        const timer = setTimeout(() => {
+            if (resolved) return;
+            resolved = true;
+            cleanupClient();
+            showRetryError('Connection timed out. Could not reach host.');
+        }, CONNECT_TIMEOUT_MS);
+
+        clientPeer = new Peer({ ...SIGNALING_CONFIG, config: ICE_CONFIG });
+        clientPeer.on('open', () => {
+            document.getElementById('join-status').textContent = 'Connecting to host...';
+            const conn = clientPeer.connect(peerId);
+            pendingConnection = conn;
+            conn.on('open', () => {
+                if (resolved) return;
+                resolved = true;
+                clearTimeout(timer);
+                if (autoJoin) {
+                    doJoin();
+                } else {
+                    document.getElementById('join-status').textContent = 'Game found! Click JOIN to connect.';
+                    document.getElementById('btn-join-submit').textContent = 'JOIN GAME';
+                    document.getElementById('btn-join-submit').disabled = false;
+                    document.getElementById('btn-join-submit').onclick = doJoin;
+                    document.getElementById('join-input').style.display = 'none';
+                }
+            });
+            conn.on('data', onClientMessage);
+            conn.on('close', () => {
+                if (clientConnection) {
+                    setStatusMsg('Disconnected from host', 300);
+                    cleanupClient();
+                    appState = AppState.MENU;
+                    showMenu();
+                    updateControllerUI();
+                } else {
+                    if (timer) clearTimeout(timer);
+                    showRetryError('Connection lost. The host may have left.');
+                }
+            });
+            conn.on('error', (err) => {
+                console.error('DataConnection error:', err);
+                if (clientConnection) {
+                    cleanupClient();
+                    appState = AppState.MENU;
+                    showMenu();
+                    updateControllerUI();
+                } else {
+                    if (timer) clearTimeout(timer);
+                    showRetryError('Connection error: ' + err);
+                }
+            });
+        });
+        clientPeer.on('error', (err) => {
             if (resolved) return;
             resolved = true;
             clearTimeout(timer);
-            if (autoJoin) {
-                doJoin();
-            } else {
-                document.getElementById('join-status').textContent = 'Game found! Click JOIN to connect.';
-                document.getElementById('btn-join-submit').textContent = 'JOIN GAME';
-                document.getElementById('btn-join-submit').disabled = false;
-                document.getElementById('btn-join-submit').onclick = doJoin;
-                document.getElementById('join-input').style.display = 'none';
+            console.error('Client PeerJS error:', err);
+            cleanupClient();
+            if (err.type === 'peer-unavailable' && retries < MAX_RETRIES) {
+                retries++;
+                document.getElementById('join-status').textContent = 'Retrying... (' + retries + '/' + MAX_RETRIES + ')';
+                setTimeout(attempt, RETRY_DELAY_MS);
+                return;
             }
+            const friendly = {
+                'browser-incompatible': 'Your browser is not supported for WebRTC connections',
+                'disconnected': 'Lost connection to the signaling server',
+                'invalid-id': 'The host ID provided is not valid',
+                'network': 'Network error. Check your internet connection.',
+                'peer-unavailable': 'Host not found. The game may have ended or the signaling server is unreachable.',
+                'webrtc': 'WebRTC connection failed. Check your firewall settings.'
+            };
+            showRetryError(friendly[err.type] || 'Connection failed: ' + err.type);
         });
-        conn.on('data', onClientMessage);
-        conn.on('close', () => {
-            if (clientConnection) {
-                setStatusMsg('Disconnected from host', 300);
-                cleanupClient();
-                appState = AppState.MENU;
-                showMenu();
-                updateControllerUI();
-            } else {
-                if (timer) clearTimeout(timer);
-                showRetryError('Connection lost. The host may have left.');
-            }
-        });
-        conn.on('error', (err) => {
-            console.error('DataConnection error:', err);
-            if (clientConnection) {
-                cleanupClient();
-                appState = AppState.MENU;
-                showMenu();
-                updateControllerUI();
-            } else {
-                if (timer) clearTimeout(timer);
-                showRetryError('Connection error: ' + err);
-            }
-        });
-    });
-    clientPeer.on('error', (err) => {
-        if (resolved) return;
-        resolved = true;
-        clearTimeout(timer);
-        console.error('Client PeerJS error:', err);
-        cleanupClient();
-        const friendly = {
-            'browser-incompatible': 'Your browser is not supported for WebRTC connections',
-            'disconnected': 'Lost connection to the signaling server',
-            'invalid-id': 'The host ID provided is not valid',
-            'network': 'Network error. Check your internet connection.',
-            'peer-unavailable': 'Host not found. The game may have ended.',
-            'webrtc': 'WebRTC connection failed. Check your firewall settings.'
-        };
-        showRetryError(friendly[err.type] || 'Connection failed: ' + err.type);
-    });
+    }
+
+    attempt();
 }
 
 function doJoin() {
@@ -1550,8 +1580,7 @@ function updateLobbyUI() {
     const startHint = document.getElementById('start-hint');
     const btnLobbyStart = document.getElementById('btn-lobby-start');
     if (netRole === NetRole.HOST && activePlayerCount >= 1) {
-        const inviteRow = document.getElementById('host-invite-row');
-        startHint.classList.toggle('hidden', inviteRow.classList.contains('hidden'));
+        startHint.classList.remove('hidden');
         btnLobbyStart.style.display = 'inline-block';
     } else {
         startHint.classList.add('hidden');
@@ -2220,7 +2249,7 @@ setInterval(() => {
     if (appState === AppState.LOBBY) {
         const startHint = document.getElementById('start-hint');
         if (netRole === NetRole.HOST && activePlayerCount >= 1) {
-            startHint.classList.toggle('hidden', document.getElementById('host-invite-row').classList.contains('hidden'));
+            startHint.classList.remove('hidden');
         } else { startHint.classList.add('hidden'); }
     }
     // Host heartbeat (every ~5s = 10 intervals)
