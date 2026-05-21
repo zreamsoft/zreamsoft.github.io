@@ -31,16 +31,22 @@ body {
 }
 #gameCanvas { display:block; background:#0D0D1A; }
 
-.overlay {
+.overlay, .overlay-fs {
     position:absolute; top:0; left:0;
     width:100%; height:100%;
     display:flex; flex-direction:column;
     align-items:center; justify-content:center;
     pointer-events:none; z-index:10;
 }
-.overlay > * { pointer-events:auto; }
+.overlay-fs {
+    position:fixed; left:50%;
+    transform:translateX(-50%);
+    max-width:600px; height:100dvh;
+}
+.overlay > *, .overlay-fs > * { pointer-events:auto; }
 .hidden { display:none !important; }
 .hidden-ctrl { display:none !important; }
+.conn-msg { min-height:18px; font-size:clamp(10px,2vw,12px); text-align:center; color:#8888AA; padding:2px 8px; }
 
 .menu-btn {
     background:#1A1A2E; color:#CCCCCC; border:1px solid #00FF88;
@@ -54,10 +60,16 @@ body {
 
 .title-text {
     color:#00FF88; font-size:clamp(24px,8vw,42px); font-weight:bold;
-    letter-spacing:clamp(6px,2vw,12px); margin-bottom:4px;
+    letter-spacing:clamp(6px,2vw,12px); margin-bottom:0;
     text-shadow:0 0 20px rgba(0,255,136,0.4);
 }
 .subtitle { color:#8888AA; font-size:clamp(10px,2.5vw,14px); margin-bottom:20px; text-align:center; padding:0 10px; }
+.title-box { display:inline-flex; flex-direction:column; align-items:center; padding:clamp(14px,3vw,24px) clamp(20px,4vw,36px); border:2px solid #00FF88; border-radius:clamp(10px,2vw,16px); background:rgba(0,255,136,0.04); box-shadow:0 0 30px rgba(0,255,136,0.15), inset 0 0 20px rgba(0,255,136,0.04); margin-bottom:clamp(8px,2vw,14px); }
+.menu-snakes { display:flex; justify-content:center; align-items:center; gap:clamp(10px,2.5vw,18px); margin:6px 0 0; }
+.menu-snake { display:flex; align-items:center; gap:3px; }
+.menu-snake .ms-seg { width:10px; height:10px; border-radius:2px; }
+.menu-snake .ms-head { width:13px; height:13px; border-radius:3px; position:relative; }
+.menu-snake .ms-head::after { content:''; position:absolute; width:4px; height:4px; background:#FFFFFF; border-radius:50%; top:2px; right:2px; }
 .hint-text { color:#8888AA; font-size:clamp(10px,2.2vw,12px); margin-top:10px; text-align:center; padding:0 10px; }
 
 .connect-area {
@@ -114,37 +126,55 @@ body {
 #scorebar {
     flex:0 0 auto;
     background:#1A1A2E;
-    border-top:1px solid #00FF88;
     border-bottom:1px solid #00FF88;
-    padding:6px 8px;
+    padding:4px 8px;
     display:flex; flex-direction:column;
     justify-content:center;
-    min-height:56px;
 }
 #score-player-list {
     display:flex; flex-wrap:wrap; justify-content:space-around; align-items:center;
-    gap:6px;
+    gap:4px;
 }
 .score-player-entry {
     display:flex; flex-direction:column; align-items:center;
-    background:#0D0D1A; border-radius:6px;
-    padding:4px 10px; min-width:70px;
+    background:rgba(13,13,26,0.5); border-radius:4px;
+    padding:3px 8px; min-width:56px;
 }
-.score-player-name {
-    font-size:clamp(9px,2vw,11px); font-weight:bold;
-    letter-spacing:1px;
+.score-player-snake {
+    display:flex; align-items:center; gap:2px;
+    margin-bottom:2px;
+}
+.score-player-snake .seg {
+    width:8px; height:8px;
+    border-radius:2px;
+}
+.score-player-snake .head {
+    width:10px; height:10px;
+    border-radius:2px;
+    position:relative;
+}
+.score-player-snake .head::after {
+    content:''; position:absolute;
+    width:3px; height:3px;
+    background:#FFFFFF; border-radius:50%;
+    top:1px; right:1px;
 }
 .score-player-score {
-    font-size:clamp(14px,3.5vw,20px); font-weight:bold;
+    font-size:clamp(12px,2.8vw,16px); font-weight:bold;
 }
 .score-player-dead {
-    font-size:clamp(8px,1.8vw,10px);
+    font-size:clamp(7px,1.5vw,9px);
     color:#FF4444; font-weight:bold;
 }
-#score-hint {
-    text-align:center; margin-top:2px;
-    font-size:clamp(8px,1.8vw,10px); color:#8888AA;
-    min-height:14px;
+#game-hint {
+    flex:0 0 auto;
+    text-align:center;
+    padding:3px 8px;
+    font-size:clamp(8px,1.8vw,10px);
+    color:#8888AA;
+    background:#0A0A16;
+    border-top:1px solid #16213E;
+    min-height:20px;
 }
 
 /* CONTROLLER */
@@ -202,22 +232,56 @@ body {
 <body>
 <div id="app-container">
 
+    <!-- SCORE BAR -->
+    <div id="scorebar" class="hidden-ctrl">
+        <div id="score-player-list"></div>
+    </div>
+
     <div id="game-container">
         <canvas id="gameCanvas"></canvas>
 
         <!-- MENU OVERLAY -->
-        <div id="menu-overlay" class="overlay">
-            <div class="title-text">SNAKE</div>
-            <div class="subtitle">4 PLAYER MULTIPLAYER (port 8888)</div>
+        <div id="menu-overlay" class="overlay-fs">
+            <div class="title-box">
+                <div class="title-text">SNAKE</div>
+                <div class="menu-snakes">
+                <div class="menu-snake">
+                    <div class="ms-seg" style="background:#00CC66"></div>
+                    <div class="ms-seg" style="background:#00CC66"></div>
+                    <div class="ms-seg" style="background:#00CC66"></div>
+                    <div class="ms-head" style="background:#00FF88"></div>
+                </div>
+                <div class="menu-snake">
+                    <div class="ms-seg" style="background:#3399DD"></div>
+                    <div class="ms-seg" style="background:#3399DD"></div>
+                    <div class="ms-seg" style="background:#3399DD"></div>
+                    <div class="ms-head" style="background:#44BBFF"></div>
+                </div>
+                <div class="menu-snake">
+                    <div class="ms-seg" style="background:#DD9900"></div>
+                    <div class="ms-seg" style="background:#DD9900"></div>
+                    <div class="ms-seg" style="background:#DD9900"></div>
+                    <div class="ms-head" style="background:#FFBB00"></div>
+                </div>
+                <div class="menu-snake">
+                    <div class="ms-seg" style="background:#DD4499"></div>
+                    <div class="ms-seg" style="background:#DD4499"></div>
+                    <div class="ms-seg" style="background:#DD4499"></div>
+                    <div class="ms-head" style="background:#FF66BB"></div>
+                </div>
+                </div>
+            </div>
+            <div class="subtitle">4 PLAYER MULTIPLAYER</div>
             <button class="menu-btn" onclick="createGame()">1 - CREATE GAME (HOST)</button>
             <button class="menu-btn" onclick="showJoinUI()">2 - JOIN GAME</button>
             <button class="menu-btn" onclick="showHelp()">3 - HOW TO PLAY</button>
             <div id="menu-status" class="status-msg"></div>
             <div class="hint-text">Use D-Pad / WASD / Arrows to move</div>
+            <div class="conn-msg"></div>
         </div>
 
         <!-- LOBBY OVERLAY -->
-        <div id="lobby-overlay" class="overlay hidden">
+        <div id="lobby-overlay" class="overlay-fs hidden">
             <div id="lobby-title" style="color:#00FF88;font-size:clamp(20px,5vw,28px);font-weight:bold;letter-spacing:4px;margin-bottom:4px;">LOBBY</div>
             <div class="lobby-info">Connected: <span id="player-count" class="highlight">0</span>/4</div>
             <div id="host-ip-info" style="color:#8888AA;font-size:clamp(10px,2vw,12px);margin-bottom:4px;"></div>
@@ -248,7 +312,12 @@ body {
             </div>
             <div id="lobby-wait-msg" style="color:#8888AA;font-size:clamp(11px,2.2vw,13px);margin:4px 0;"></div>
             <div id="start-hint" class="hidden" style="color:#00FF88;font-size:clamp(12px,2.5vw,14px);margin:4px 0;">Tap START or press SPACE to begin!</div>
+            <div id="lobby-actions" style="margin-top:10px;display:none;gap:10px;flex-wrap:wrap;justify-content:center;">
+                <button class="action-btn" id="btn-lobby-start" style="display:none;">Start Game</button>
+                <button class="action-btn" id="btn-lobby-cancel">Cancel</button>
+            </div>
             <div class="hint-text">QUIT: Back to menu</div>
+            <div class="conn-msg"></div>
         </div>
 
         <!-- GAME OVER OVERLAY -->
@@ -258,13 +327,8 @@ body {
         </div>
     </div>
 
-    <div id="conn-indicator" style="flex:0 0 auto;color:#8888AA;font-size:clamp(10px,2vw,12px);text-align:center;min-height:18px;padding:2px 8px;background:#0A0A16;border-top:1px solid #16213E;"></div>
-
-    <!-- SCORE BAR -->
-    <div id="scorebar" class="hidden-ctrl">
-        <div id="score-player-list"></div>
-        <div id="score-hint"></div>
-    </div>
+    <!-- GAME HINT (instruction text) -->
+    <div id="game-hint" class="hidden-ctrl"></div>
 
     <!-- CONTROLLER -->
     <div id="controller-area" class="hidden-ctrl">
@@ -473,6 +537,7 @@ function startMatch(){
     resetAll();gameState.aliveCount=0;
     for(const p of gameState.players)if(p.active)gameState.aliveCount++;
     appState=AppState.PLAYING;hideAllOverlays();
+    canvas.style.display='block';
     document.getElementById('scorebar').classList.remove('hidden-ctrl');
     document.getElementById('gameover-overlay').classList.add('hidden');
     updateControllerUI();
@@ -673,6 +738,7 @@ function onClientMessage(e){
         if(appState!==AppState.PLAYING){
             appState=AppState.PLAYING;
             hideAllOverlays();
+            canvas.style.display='block';
             document.getElementById('scorebar').classList.remove('hidden-ctrl');
             document.getElementById('gameover-overlay').classList.add('hidden');
             updateControllerUI();
@@ -809,6 +875,7 @@ function showMenu(){
     document.getElementById('menu-overlay').classList.remove('hidden');
     document.getElementById('controller-area').classList.add('hidden-ctrl');
     document.getElementById('scorebar').classList.add('hidden-ctrl');
+    canvas.style.display='none';
     appState=AppState.MENU;
 }
 let statusMsgTimeout=null;
@@ -828,12 +895,16 @@ function setConnectionStatus(msg){
     if(el2)el2.textContent=msg;
 }
 function setIceStatus(msg,color){
-    const el=document.getElementById('conn-indicator');
-    if(el){el.textContent=msg;el.style.color=color||'#8888AA';el.style.background='transparent';}
+    document.querySelectorAll('.conn-msg').forEach(el => {
+        el.textContent=msg;
+        el.style.color=color||'#8888AA';
+    });
 }
 function clearIceStatus(){
-    const el=document.getElementById('conn-indicator');
-    if(el){el.textContent='';el.style.color='';}
+    document.querySelectorAll('.conn-msg').forEach(el => {
+        el.textContent='';
+        el.style.color='';
+    });
 }
 async function detectTurnRelay(pc){
     if(!pc||pc.iceConnectionState!=='connected')return;
@@ -878,13 +949,7 @@ function updateControllerUI(){
     ctrl.classList.remove('hidden-ctrl');
 
     if(appState===AppState.LOBBY){
-        if(netRole===NetRole.HOST&&activePlayerCount>=1&&document.getElementById('host-invite-row').style.display!=='none'){
-            btnStart.classList.remove('hidden-btn');
-        }else{
-            btnStart.classList.add('hidden-btn');
-        }
-        btnRestart.classList.add('hidden-btn');
-        btnQuit.classList.remove('hidden-btn');
+        ctrl.classList.add('hidden-ctrl');
     }else if(appState===AppState.PLAYING){
         btnStart.classList.add('hidden-btn');
         if(gameState.gameOver&&netRole===NetRole.HOST){
@@ -927,9 +992,9 @@ async function createGame(){
     netRole=NetRole.HOST;
     hostPrepare();
     hideAllOverlays();
+    canvas.style.display='none';
     document.getElementById('lobby-overlay').classList.remove('hidden');
-    document.getElementById('controller-area').classList.remove('hidden-ctrl');
-    document.getElementById('scorebar').classList.remove('hidden-ctrl');
+    document.getElementById('lobby-actions').style.display='flex';
     updateLobbyUI();
     updateControllerUI();
     try{
@@ -1033,8 +1098,7 @@ function copySDP(){
 function showJoinUI(){
     document.getElementById('menu-overlay').classList.add('hidden');
     document.getElementById('lobby-overlay').classList.remove('hidden');
-    document.getElementById('controller-area').classList.remove('hidden-ctrl');
-    document.getElementById('scorebar').classList.remove('hidden-ctrl');
+    canvas.style.display='none';
     document.getElementById('host-ip-info').textContent='';
     document.getElementById('host-invite-row').style.display='none';
     document.getElementById('lobby-wait-msg').textContent='';
@@ -1046,6 +1110,7 @@ function showJoinUI(){
     document.getElementById('sdp-paste-area').placeholder='Paste the invite code...';
     document.getElementById('sdp-receive-status').textContent='';
     clearIceStatus();
+    document.getElementById('lobby-actions').style.display='none';
     const submitBtn=document.querySelector('#sdp-receive .btn-row button:first-child');
     submitBtn.textContent='Join Game';
     submitBtn.onclick=clientSubmitOffer;
@@ -1088,6 +1153,7 @@ function cancelJoin(){
     document.getElementById('menu-overlay').classList.remove('hidden');
     document.getElementById('controller-area').classList.add('hidden-ctrl');
     document.getElementById('scorebar').classList.add('hidden-ctrl');
+    canvas.style.display='none';
     appState=AppState.MENU;
 }
 function showHelp(){setStatusMsg('Last snake alive wins! Eat food (+10) to grow. Use D-Pad/WASD/Arrows to move.',300);}
@@ -1109,10 +1175,15 @@ function updateLobbyUI(){
     }
     listEl.innerHTML=html;
     const startHint=document.getElementById('start-hint');
+    const btnLobbyStart=document.getElementById('btn-lobby-start');
     if(netRole===NetRole.HOST&&activePlayerCount>=1){
         const inviteRow=document.getElementById('host-invite-row');
         startHint.classList.toggle('hidden',inviteRow.style.display==='none');
-    }else{startHint.classList.add('hidden');}
+        btnLobbyStart.style.display='inline-block';
+    }else{
+        startHint.classList.add('hidden');
+        btnLobbyStart.style.display='none';
+    }
     if(netRole===NetRole.HOST){
         document.getElementById('lobby-title').textContent='LOBBY (HOST)';
         document.getElementById('lobby-wait-msg').textContent='Tap START or press SPACE to begin!';
@@ -1134,19 +1205,26 @@ function updateScoreBar(){
     let html='';
     for(let i=0;i<MAX_PLAYERS;i++){
         if(!gameState.players[i].active)continue;
-        const color=COLORS.PLAYER[i];
-        const you=(i===localPlayerId)?' (YOU)':'';
+        const pColor=COLORS.PLAYER[i];
+        const bColor=COLORS.BODY[i];
+        const dead=!gameState.players[i].alive&&!gameState.gameOver;
+        const opacity=dead?'0.4':'1';
         html+='<div class="score-player-entry">';
-        html+='<span class="score-player-name" style="color:'+color+'">P'+(i+1)+you+'</span>';
-        html+='<span class="score-player-score" style="color:'+color+'">'+gameState.players[i].score+'</span>';
-        if(!gameState.players[i].alive&&!gameState.gameOver){
+        html+='<div class="score-player-snake" style="opacity:'+opacity+'">';
+        for(let s=0;s<3;s++){
+            html+='<div class="seg" style="background:'+bColor+'"></div>';
+        }
+        html+='<div class="head" style="background:'+pColor+'"></div>';
+        html+='</div>';
+        html+='<span class="score-player-score" style="color:'+pColor+'">'+gameState.players[i].score+'</span>';
+        if(dead){
             html+='<span class="score-player-dead">DEAD</span>';
         }
         html+='</div>';
     }
     listEl.innerHTML=html;
 
-    const hintEl=document.getElementById('score-hint');
+    const hintEl=document.getElementById('game-hint');
     if(gameState.gameOver){
         if(netRole===NetRole.HOST){
             hintEl.textContent='RESTART: R key / Tap button';
@@ -1193,7 +1271,19 @@ function renderGame(){
             ctx.fillRect(gx*CELL_SIZE,gy*CELL_SIZE,1,1);
     for(let gx=0;gx<GRID_W;gx++){drawCell(gx,0,'#E94560');drawCell(gx,GRID_H-1,'#E94560');}
     for(let gy=0;gy<GRID_H;gy++){drawCell(0,gy,'#E94560');drawCell(GRID_W-1,gy,'#E94560');}
-    drawCell(gameState.food.x,gameState.food.y,'#FF4444');
+    const fx=gameState.food.x*CELL_SIZE,fy=gameState.food.y*CELL_SIZE;
+    const t=performance.now();
+    const pulse=0.85+Math.sin(t*0.005)*0.15;
+    const gs=0.5+Math.sin(t*0.005)*0.5;
+    const hue=(t*0.05)%360;
+    const s=(CELL_SIZE-2)*pulse;
+    const o=(CELL_SIZE-s)/2;
+    ctx.save();
+    ctx.shadowColor=`hsl(${hue},100%,60%)`;
+    ctx.shadowBlur=14*gs;
+    ctx.fillStyle=`hsl(${hue},100%,60%)`;
+    ctx.fillRect(fx+o,fy+o,s,s);
+    ctx.restore();
     for(let p=0;p<MAX_PLAYERS;p++){
         const pl=gameState.players[p];
         if(!pl.active||pl.body.length===0)continue;
@@ -1337,6 +1427,11 @@ document.getElementById('btn-restart-game').addEventListener('click',onActionRes
 document.getElementById('btn-restart-game').addEventListener('touchend',(e)=>{e.preventDefault();onActionRestart();});
 document.getElementById('btn-quit-game').addEventListener('click',onActionQuit);
 document.getElementById('btn-quit-game').addEventListener('touchend',(e)=>{e.preventDefault();onActionQuit();});
+
+document.getElementById('btn-lobby-start').addEventListener('click',onActionStart);
+document.getElementById('btn-lobby-start').addEventListener('touchend',(e)=>{e.preventDefault();onActionStart();});
+document.getElementById('btn-lobby-cancel').addEventListener('click',onActionQuit);
+document.getElementById('btn-lobby-cancel').addEventListener('touchend',(e)=>{e.preventDefault();onActionQuit();});
 
 // ============================================================
 // RESIZE HANDLER
