@@ -350,6 +350,7 @@ const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
 function resizeGame() {
+    const dpr = window.devicePixelRatio || 1;
     const pad = 16;
     const maxW = window.innerWidth - pad;
     const maxH = window.innerHeight * (appState === AppState.PLAYING ? 0.70 : 0.50);
@@ -370,8 +371,11 @@ function resizeGame() {
     }
     WIN_W = Math.floor(w);
     WIN_H = Math.floor(h);
-    canvas.width = WIN_W;
-    canvas.height = WIN_H;
+    canvas.width = WIN_W * dpr;
+    canvas.height = WIN_H * dpr;
+    canvas.style.width = WIN_W + 'px';
+    canvas.style.height = WIN_H + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     document.getElementById('game-container').style.height = WIN_H + 'px';
 }
 
