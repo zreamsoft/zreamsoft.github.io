@@ -575,8 +575,10 @@ function startRound() {
     sendGameState();
     updateUI();
 
-    // If dealer has blackjack, skip player turns
-    if (isBlackjack(gameState.dealer.hand)) {
+    // Dealer peeks at hole card when showing Ace or 10-value (American Standard)
+    const dealerUp = gameState.dealer.hand[1];
+    const dealerHole = gameState.dealer.hand[0];
+    if ((dealerUp.rank === 0 || dealerUp.rank >= 9) && cardValue(dealerHole.rank) + cardValue(dealerUp.rank) === 21) {
         gameState.dealer.hidden = false;
         gameState.dealer.hand[0].hidden = false;
         gameState.phase = Phase.DEALER_TURN;
@@ -706,7 +708,7 @@ function advanceAfterAction() {
                 sendGameState();
                 updateUI();
                 dealerPlay();
-            }, FLIP_MS + 50);
+            }, 600);
         } else {
             sendGameState();
             updateUI();
@@ -1964,8 +1966,9 @@ function renderBJGame() {
         dealerCX += CARD_W + cardGap;
     }
 
-    // Dealer total
-    const showTotal = dealerCards.length > 0 && (gameState.phase === Phase.DEALER_TURN || gameState.phase === Phase.ROUND_OVER || gameState.dealer.hidden === false);
+    // Dealer total — show "Showing: X" until hole card flip completes
+    const dealerRevealed = gameState.dealer.hidden === false && !_flipAnims['dealer-c0'];
+    const showTotal = dealerCards.length > 0 && (dealerRevealed || gameState.phase === Phase.ROUND_OVER);
     if (dealerCards.length > 0) {
         if (showTotal) {
             const dVal = handValue(dealerCards);
@@ -1986,11 +1989,11 @@ function renderBJGame() {
             for (const c of dealerCards) {
                 if (!c.hidden && c.rank !== undefined) visibleVal += cardValue(c.rank);
             }
-            ctx.fillStyle = '#AAAAAA';
+            ctx.fillStyle = _flipAnims['dealer-c0'] ? '#FFFFFF' : '#AAAAAA';
             ctx.font = Math.max(13, Math.floor(CARD_H * 0.50)) + 'px monospace';
             ctx.textAlign = 'left';
             ctx.textBaseline = 'top';
-            ctx.fillText('Showing: ' + (visibleVal > 0 ? String(visibleVal) : '?'), 10, dealerCardY + CARD_H + 8);
+            ctx.fillText((_flipAnims['dealer-c0'] ? '' : 'Showing: ') + (visibleVal > 0 ? String(visibleVal) : '?'), 10, dealerCardY + CARD_H + 8);
         }
     }
 
