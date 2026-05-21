@@ -414,6 +414,7 @@ let deck = [];
 let _prevCardCounts = {};
 let _flipAnims = {};
 const FLIP_MS = 300;
+let _prevDealerHidden = true;
 let particles = [];
 let _dealerBJShown = false;
 let _lastEffectRound = -1;
@@ -506,6 +507,7 @@ function handValue(hand) {
     let total = 0;
     let aces = 0;
     for (const c of hand) {
+        if (c.hidden) continue;
         total += cardValue(c.rank);
         if (c.rank === 0) aces++;
     }
@@ -589,11 +591,13 @@ function startRound() {
     if (allDone) {
         gameState.phase = Phase.DEALER_TURN;
         gameState.currentPlayer = -1;
+        sendGameState();
+        updateUI();
         setTimeout(() => dealerPlay(), 600);
         return;
     }
 
-    // Find first player who hasn't already finished (blackjack)
+    // Find first playerwho hasn't already finished (blackjack)
     let firstTurn = -1;
     for (const pIdx of gameState.turnOrder) {
         if (!gameState.players[pIdx].standing && !gameState.players[pIdx].busted) {
@@ -628,6 +632,8 @@ function nextPlayer() {
         gameState.dealer.hidden = false;
         gameState.dealer.hand[0].hidden = false;
         gameState.message = "Dealer's turn";
+        sendGameState();
+        updateUI();
         dealerPlay();
         return;
     }
@@ -689,9 +695,18 @@ function advanceAfterAction() {
         gameState.currentPlayer = -1;
         if (gameState.phase !== Phase.DEALER_TURN) {
             gameState.phase = Phase.DEALER_TURN;
-            gameState.dealer.hidden = false;
-            gameState.dealer.hand[0].hidden = false;
-            dealerPlay();
+            // Broadcast phase change first, dealer card stays hidden
+            // so the player's last card flip animation completes before reveal
+            sendGameState();
+            updateUI();
+            setTimeout(() => {
+                if (gameState.phase !== Phase.DEALER_TURN) return;
+                gameState.dealer.hidden = false;
+                gameState.dealer.hand[0].hidden = false;
+                sendGameState();
+                updateUI();
+                dealerPlay();
+            }, FLIP_MS + 50);
         } else {
             sendGameState();
             updateUI();
@@ -1893,6 +1908,13 @@ function renderBJGame() {
     for (const k in _flipAnims) {
         if (_now - _flipAnims[k].start >= FLIP_MS) delete _flipAnims[k];
     }
+
+    // Detect dealer hole card reveal and trigger flip animation
+    const dealerFirst = gameState.dealer.hand && gameState.dealer.hand[0];
+    if (dealerFirst && dealerFirst.hidden === false && _prevDealerHidden) {
+        _flipAnims['dealer-c0'] = { start: _now };
+    }
+    _prevDealerHidden = dealerFirst ? !!dealerFirst.hidden : true;
 
     // Green felt background
     fillRect(0, 0, WIN_W, WIN_H, '#0e4a1e');
