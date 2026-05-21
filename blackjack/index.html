@@ -1,0 +1,2194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Blackjack - 4P Multiplayer</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+html, body {
+    width:100%; height:100%;
+    overflow:hidden;
+    touch-action: manipulation;
+    -webkit-user-select:none; user-select:none;
+    -webkit-tap-highlight-color:transparent;
+    -webkit-touch-callout:none;
+}
+body {
+    background:#0D0D1A;
+    font-family:monospace;
+    display:flex; justify-content:center; align-items:center;
+}
+#app-container {
+    display:flex; flex-direction:column;
+    width:100%; max-width:600px;
+    height:100vh; height:100dvh;
+}
+#game-container {
+    position:relative; flex:0 0 auto;
+    display:flex; justify-content:center; align-items:center;
+    background:#0D0D1A;
+}
+#gameCanvas { display:block; background:#1B5E20; border-radius:4px; }
+
+.overlay, .overlay-fs {
+    position:absolute; top:0; left:0;
+    width:100%; height:100%;
+    display:flex; flex-direction:column;
+    align-items:center; justify-content:center;
+    pointer-events:none; z-index:10;
+}
+.overlay-fs {
+    position:fixed; left:50%;
+    transform:translateX(-50%);
+    max-width:600px; height:100dvh;
+}
+.overlay > *, .overlay-fs > * { pointer-events:auto; }
+.hidden { display:none !important; }
+.hidden-ctrl { display:none !important; }
+.conn-msg { min-height:18px; font-size:clamp(10px,2vw,12px); text-align:center; color:#8888AA; padding:2px 8px; }
+
+.menu-btn {
+    background:#1A1A2E; color:#CCCCCC; border:1px solid #CC0000;
+    padding:10px 16px; font-family:monospace; font-size:clamp(12px,3vw,16px);
+    cursor:pointer; margin:4px; transition:all 0.15s;
+    border-radius:6px; min-width:200px; max-width:88vw;
+    -webkit-tap-highlight-color:transparent;
+}
+.menu-btn:hover { background:#CC0000; color:#FFFFFF; }
+.menu-btn:active { transform:scale(0.97); background:#CC0000; color:#FFFFFF; }
+
+.title-text {
+    color:#FFD700; font-size:clamp(24px,8vw,42px); font-weight:bold;
+    letter-spacing:clamp(6px,2vw,12px); margin-bottom:0;
+    text-shadow:0 0 20px rgba(255,215,0,0.4);
+}
+.subtitle { color:#AAAAAA; font-size:clamp(10px,2.5vw,14px); margin-bottom:20px; text-align:center; padding:0 10px; }
+.title-box { display:inline-flex; flex-direction:column; align-items:center; padding:clamp(14px,3vw,24px) clamp(20px,4vw,36px); border:2px solid #FFD700; border-radius:clamp(10px,2vw,16px); background:rgba(255,215,0,0.04); box-shadow:0 0 30px rgba(255,215,0,0.15), inset 0 0 20px rgba(255,215,0,0.04); margin-bottom:clamp(8px,2vw,14px); }
+.menu-cards { display:flex; justify-content:center; align-items:center; gap:clamp(6px,1.5vw,12px); margin:6px 0 0; }
+.mc-card { font-size:clamp(18px,5vw,28px); font-weight:bold; padding:2px 4px; background:rgba(255,255,255,0.9); border-radius:4px; min-width:clamp(24px,6vw,40px); text-align:center; }
+.hint-text { color:#8888AA; font-size:clamp(10px,2.2vw,12px); margin-top:10px; text-align:center; padding:0 10px; }
+
+.connect-area {
+    background:#1A1A2E; border:1px solid #44BBFF; border-radius:4px;
+    padding:12px; width:min(500px,92vw); margin:6px 0;
+}
+.connect-area label { display:block; color:#CCCCCC; font-size:clamp(11px,2.2vw,13px); margin-bottom:4px; }
+.connect-area textarea {
+    width:100%; height:80px; background:#0D0D1A; color:#FFD700;
+    border:1px solid #333; font-family:monospace; font-size:clamp(10px,2vw,12px);
+    padding:6px; resize:vertical; outline:none; border-radius:2px;
+}
+.connect-area textarea:focus { border-color:#FFD700; }
+.connect-area .btn-row { display:flex; gap:8px; margin-top:8px; justify-content:center; flex-wrap:wrap; }
+.connect-area .a-btn {
+    background:#16213E; color:#CCCCCC; border:1px solid #44BBFF;
+    padding:8px 14px; font-family:monospace; font-size:clamp(11px,2.2vw,13px);
+    cursor:pointer; border-radius:4px; transition:all 0.15s;
+    -webkit-tap-highlight-color:transparent;
+}
+.connect-area .a-btn:hover { background:#44BBFF; color:#0D0D1A; }
+.connect-area .a-btn:active { background:#44BBFF; color:#0D0D1A; }
+.connect-area .status-text {
+    color:#8888AA; font-size:clamp(10px,2vw,12px); margin-top:6px; text-align:center; min-height:16px;
+}
+.connected-dot { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:6px; vertical-align:middle; }
+.player-list { margin:4px 0; color:#CCCCCC; font-size:clamp(11px,2.2vw,13px); }
+.player-list .p-entry { margin:2px 0; }
+.lobby-info { color:#CCCCCC; font-size:clamp(12px,2.5vw,14px); text-align:center; margin:3px 0; }
+.lobby-info .highlight { color:#FFD700; }
+.status-msg {
+    color:#FF4444; font-size:clamp(11px,2.2vw,13px); text-align:center; margin-top:4px; min-height:18px;
+}
+.code-ready-msg {
+    color:#FFBB00; font-size:clamp(16px,4vw,24px); font-weight:bold; text-align:center;
+    margin-bottom:8px; letter-spacing:2px;
+    text-shadow:0 0 15px rgba(255,187,0,0.5);
+    animation:codePulse 1.5s ease-in-out infinite;
+}
+@keyframes codePulse { 0%,100% { opacity:1; } 50% { opacity:0.6; } }
+
+/* GAME OVER OVERLAY */
+.gameover-title {
+    color:#FFD700; font-size:clamp(28px,8vw,48px); font-weight:bold;
+    letter-spacing:clamp(4px,2vw,10px); margin-bottom:12px;
+    text-shadow:0 0 30px rgba(255,215,0,0.5);
+}
+.gameover-winner {
+    color:#CCCCCC; font-size:clamp(16px,4vw,24px); font-weight:bold;
+    letter-spacing:2px;
+}
+
+/* SCORE BAR (Player Info Bar) */
+#scorebar {
+    flex:0 0 auto;
+    background:#1A1A2E;
+    border-bottom:1px solid #FFD700;
+    padding:4px 8px;
+    display:flex; flex-direction:column;
+    justify-content:center;
+}
+#score-player-list {
+    display:flex; flex-wrap:wrap; justify-content:space-around; align-items:center;
+    gap:4px;
+}
+.score-player-entry {
+    display:flex; flex-direction:column; align-items:center;
+    background:rgba(13,13,26,0.5); border-radius:4px;
+    padding:3px 8px; min-width:64px;
+}
+.score-player-name {
+    font-size:clamp(14px,2.2vw,16px); font-weight:bold;
+    margin-bottom:1px;
+}
+.score-player-chips {
+    font-size:clamp(14px,2.2vw,16px);
+}
+.score-player-status {
+    font-size:clamp(11px,1.5vw,13px);
+    font-weight:bold;
+}
+#game-hint {
+    flex:0 0 auto;
+    text-align:center;
+    padding:4px 8px;
+    font-size:clamp(11px,2.5vw,14px);
+    color:#FFD700;
+    background:#0A0A16;
+    border-top:1px solid #16213E;
+    border-bottom:1px solid #16213E;
+    min-height:24px;
+    font-weight:bold;
+}
+
+/* CONTROLLER - Blackjack Actions */
+#controller-area {
+    flex:1; display:flex; flex-direction:column;
+    justify-content:center; align-items:center;
+    min-height:140px;
+    background:#0A0A16;
+    border-top:2px solid #FFD700;
+    padding:10px;
+}
+#bj-actions {
+    display:flex;
+    gap:10px;
+    justify-content:center;
+    align-items:center;
+    flex-wrap:wrap;
+}
+.bj-btn {
+    background:#1A1A2E; border:2px solid #FFD700; border-radius:12px;
+    color:#FFD700; font-family:monospace;
+    font-size:clamp(16px,4vw,22px); font-weight:bold;
+    padding:12px 24px; min-width:90px;
+    cursor:pointer;
+    -webkit-tap-highlight-color:transparent;
+    touch-action:manipulation;
+    transition:all 0.12s;
+    -webkit-user-select:none; user-select:none;
+}
+.bj-btn:active, .bj-btn.pressed {
+    background:#FFD700; color:#0D0D1A; transform:scale(0.94);
+}
+.bj-btn:disabled {
+    opacity:0.35; border-color:#666; color:#666;
+    transform:none; cursor:default;
+}
+.bj-btn:disabled:active {
+    background:#1A1A2E; color:#666; transform:none;
+}
+@keyframes turnPulse {
+    0%, 100% { box-shadow: 0 0 6px rgba(255,215,0,0.3); }
+    50% { box-shadow: 0 0 18px rgba(255,215,0,0.8); }
+}
+.turn-active .bj-btn:not(:disabled) {
+    animation: turnPulse 1.2s ease-in-out infinite;
+}
+#action-row {
+    display:flex; gap:10px; margin-top:10px; flex-wrap:wrap; justify-content:center;
+}
+.action-btn {
+    background:#1A1A2E; border:1px solid #44BBFF; color:#CCCCCC;
+    padding:10px 16px; font-family:monospace; font-size:clamp(12px,3vw,14px);
+    border-radius:8px; cursor:pointer;
+    -webkit-tap-highlight-color:transparent;
+    touch-action:manipulation; min-width:70px;
+    transition:all 0.12s;
+    -webkit-user-select:none; user-select:none;
+}
+.action-btn:active { background:#44BBFF; color:#0D0D1A; transform:scale(0.94); }
+.action-btn:disabled {
+    opacity:0.35; border-color:#666; color:#666;
+    transform:none; cursor:default;
+}
+.hidden-btn { display:none !important; }
+</style>
+</head>
+<body>
+<div id="app-container">
+
+    <!-- SCORE BAR (Player Info Bar) -->
+    <div id="scorebar" class="hidden-ctrl">
+        <div id="score-player-list"></div>
+    </div>
+
+    <div id="game-container">
+        <canvas id="gameCanvas"></canvas>
+
+        <!-- MENU OVERLAY -->
+        <div id="menu-overlay" class="overlay-fs">
+            <div class="title-box">
+                <div class="title-text">BLACKJACK</div>
+                <div class="menu-cards">
+                    <span class="mc-card" style="color:#CC0000">A♥</span>
+                    <span class="mc-card" style="color:#1a1a1a">K♠</span>
+                    <span class="mc-card" style="color:#CC0000">Q♦</span>
+                    <span class="mc-card" style="color:#1a1a1a">J♣</span>
+                </div>
+            </div>
+            <div class="subtitle">4 PLAYER MULTIPLAYER</div>
+            <button class="menu-btn" onclick="createGame()">1 - CREATE GAME (HOST)</button>
+            <button class="menu-btn" onclick="showJoinUI()">2 - JOIN GAME</button>
+            <div id="menu-status" class="status-msg"></div>
+            <div class="hint-text">H=Hit  S=Stand  D=Double  Space=Deal  X=Quit</div>
+            <div class="conn-msg"></div>
+        </div>
+
+        <!-- LOBBY OVERLAY -->
+        <div id="lobby-overlay" class="overlay-fs hidden">
+            <div id="lobby-title" style="color:#FFD700;font-size:clamp(20px,5vw,28px);font-weight:bold;letter-spacing:4px;margin-bottom:4px;">LOBBY</div>
+            <div class="lobby-info">Connected: <span id="player-count" class="highlight">0</span>/4</div>
+            <div id="host-ip-info" style="color:#8888AA;font-size:clamp(10px,2vw,12px);margin-bottom:4px;"></div>
+            <div id="player-list" class="player-list"></div>
+            <div id="connect-panel" style="width:min(500px,92vw);margin:4px 0;">
+                <div id="host-invite-row" class="hidden" style="text-align:center;margin:6px 0;">
+                    <label style="color:#CCCCCC;font-size:clamp(11px,2.2vw,13px);margin-bottom:4px;display:block;">Share this link with friends to invite them:</label>
+                    <div style="display:flex;gap:8px;align-items:center;justify-content:center;flex-wrap:wrap;">
+                        <input id="invite-link-input" type="text" readonly
+                               style="flex:1;min-width:220px;background:#0D0D1A;color:#FFD700;border:1px solid #333;padding:6px 8px;font-family:monospace;font-size:clamp(10px,2vw,12px);border-radius:2px;">
+                        <button class="a-btn" onclick="copyInviteLink()" id="btn-copy-link">Copy Link</button>
+                    </div>
+                    <div id="sdp-status" class="status-text" style="margin-top:4px;"></div>
+                </div>
+                <div id="join-area" class="hidden connect-area" style="margin:0 auto;">
+                    <label id="join-label" style="color:#CCCCCC;font-size:clamp(11px,2.2vw,13px);margin-bottom:4px;">Enter the host's invite link or peer ID:</label>
+                    <textarea id="join-input" placeholder="Paste invite link or peer ID..."></textarea>
+                    <div class="btn-row">
+                        <button class="a-btn" id="btn-join-submit" onclick="manualJoin()">Join</button>
+                        <button class="a-btn" onclick="cancelJoin()">Cancel</button>
+                    </div>
+                    <div id="join-status" class="status-text"></div>
+                </div>
+            </div>
+            <div id="lobby-wait-msg" style="color:#8888AA;font-size:clamp(11px,2.2vw,13px);margin:4px 0;"></div>
+            <div id="start-hint" class="hidden" style="color:#FFD700;font-size:clamp(12px,2.5vw,14px);margin:4px 0;">Tap DEAL or press SPACE to start!</div>
+            <div id="lobby-actions" style="margin-top:10px;display:none;gap:10px;flex-wrap:wrap;justify-content:center;">
+                <button class="action-btn" id="btn-lobby-start" style="display:none;">Deal</button>
+                <button class="action-btn" id="btn-lobby-cancel">Cancel</button>
+            </div>
+            <div class="hint-text">QUIT: Back to menu</div>
+            <div class="conn-msg"></div>
+        </div>
+
+        <!-- GAME OVER OVERLAY -->
+        <div id="gameover-overlay" class="overlay hidden">
+            <div class="gameover-title">GAME OVER</div>
+            <div id="gameover-winner" class="gameover-winner"></div>
+            <div id="gameover-detail" style="color:#8888AA;font-size:clamp(11px,2.5vw,14px);margin-top:8px;text-align:center;"></div>
+            <button class="menu-btn" id="btn-gameover-menu" onclick="onActionQuit()" style="margin-top:16px;">Back to Menu</button>
+        </div>
+    </div>
+
+    <!-- GAME HINT -->
+    <div id="game-hint" class="hidden-ctrl"></div>
+
+    <!-- CONTROLLER -->
+    <div id="controller-area" class="hidden-ctrl">
+        <div id="bj-actions">
+            <button class="bj-btn" id="btn-hit">HIT</button>
+            <button class="bj-btn" id="btn-stand">STAND</button>
+            <button class="bj-btn" id="btn-double">DOUBLE</button>
+        </div>
+        <div id="action-row">
+            <button class="action-btn hidden-btn" id="btn-start-game">DEAL</button>
+            <button class="action-btn hidden-btn" id="btn-quit-game">QUIT</button>
+        </div>
+    </div>
+
+</div>
+
+<script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+<script>
+// ============================================================
+// CONSTANTS
+// ============================================================
+const MAX_PLAYERS = 4;
+const SUITS = ['♠', '♥', '♦', '♣'];
+const RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
+const SUIT_COLORS = ['#1a1a1a', '#CC0000', '#CC0000', '#1a1a1a'];
+const Action = { HIT: 1, STAND: 2, DOUBLE_DOWN: 3 };
+const Phase = { BETTING: 0, PLAYING: 1, DEALER_TURN: 2, ROUND_OVER: 3 };
+const AppState = { MENU: 0, LOBBY: 1, PLAYING: 2 };
+const NetRole = { NONE: 0, HOST: 1, CLIENT: 2 };
+const PacketType = { JOIN_ACCEPT: 0, PLAYER_ACTION: 1, GAME_STATE: 2, LOBBY_STATE: 3, JOIN_REQUEST: 4, HEARTBEAT: 5, HEARTBEAT_ACK: 6, PLAYER_LEAVE: 7 };
+const DEFAULT_CHIPS = 1000;
+const DEFAULT_BET = 10;
+
+// ============================================================
+// DYNAMIC SIZING
+// ============================================================
+let WIN_W = 600;
+let WIN_H = 400;
+let CARD_W = 36;
+let CARD_H = 50;
+
+// ============================================================
+// CANVAS SETUP
+// ============================================================
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+function resizeGame() {
+    const pad = 16;
+    const maxW = window.innerWidth - pad;
+    const maxH = window.innerHeight * (appState === AppState.PLAYING ? 0.70 : 0.50);
+
+    let w, h;
+    if (appState === AppState.PLAYING) {
+        w = Math.min(maxW, 600);
+        h = Math.min(maxH, 650);
+    } else {
+        const ratio = maxW / maxH;
+        if (ratio > 600 / 400) {
+            h = Math.min(maxH, 500);
+            w = h * (600 / 400);
+        } else {
+            w = Math.min(maxW, 600);
+            h = w * (400 / 600);
+        }
+    }
+    WIN_W = Math.floor(w);
+    WIN_H = Math.floor(h);
+    canvas.width = WIN_W;
+    canvas.height = WIN_H;
+    document.getElementById('game-container').style.height = WIN_H + 'px';
+}
+
+// ============================================================
+// GAME STATE
+// ============================================================
+let gameState = {
+    phase: Phase.BETTING,
+    currentPlayer: -1,
+    round: 0,
+    players: [],
+    dealer: { hand: [], hidden: true },
+    turnOrder: [],
+    message: 'Press DEAL to start a round!'
+};
+
+for (let i = 0; i < MAX_PLAYERS; i++) {
+    gameState.players.push({
+        active: false,
+        hands: [[]],
+        bet: DEFAULT_BET,
+        chips: DEFAULT_CHIPS,
+        standing: false,
+        busted: false,
+        result: 'pending'
+    });
+}
+
+let appState = AppState.MENU;
+let netRole = NetRole.NONE;
+let localPlayerId = -1;
+let activePlayerCount = 0;
+let deck = [];
+let _prevCardCounts = {};
+let _flipAnims = {};
+const FLIP_MS = 300;
+let particles = [];
+let _dealerBJShown = false;
+
+// ============================================================
+// PEERJS STATE
+// ============================================================
+const ICE_CONFIG = { 'iceServers': [
+    { 'urls': 'stun:stun.l.google.com:19302' },
+    { 'urls': 'stun:stun1.l.google.com:19302' },
+    { 'urls': 'turn:global.relay.metered.ca:80', 'username': 'b91725d7ea7bd065ec4541ce', 'credential': 'mtiQ613jx/8DXIW0' },
+    { 'urls': 'turn:global.relay.metered.ca:443', 'username': 'b91725d7ea7bd065ec4541ce', 'credential': 'mtiQ613jx/8DXIW0' }
+] };
+let hostPeer = null, clientPeer = null;
+let hostConnections = new Array(MAX_PLAYERS).fill(null);
+let clientConnection = null;
+let pendingConnection = null;
+let playerConnectionType = new Array(MAX_PLAYERS).fill('');
+let lastAckTick = new Array(MAX_PLAYERS).fill(-1);
+let tickCounter = 0;
+let lastGameStateTime = Date.now();
+let playerDisconnected = new Array(MAX_PLAYERS).fill(false);
+
+// ============================================================
+// FRIENDLY PEER ID GENERATION
+// ============================================================
+const ADJECTIVES = 'cool fast bold calm wise keen pure safe warm mild dark soft high low true glad kind deep rare slim busy free snug wild'.split(' ');
+const NOUNS = 'panda tiger eagle otter fox bear wolf deer hawk owl seal mole dove lynx hare kite loon ram cat elk doe eel bat'.split(' ');
+function randomSuffix(n) {
+    const c = 'abcdefghijklmnopqrstuvwxyz0123456789';
+    let s = '';
+    for (let i = 0; i < n; i++) s += c[Math.floor(Math.random() * c.length)];
+    return s;
+}
+function generateFriendlyId() {
+    const adj = ADJECTIVES[Math.floor(Math.random() * ADJECTIVES.length)];
+    const noun = NOUNS[Math.floor(Math.random() * NOUNS.length)];
+    return adj + '-' + noun + '-' + randomSuffix(4);
+}
+
+// ============================================================
+// DRAWING HELPERS
+// ============================================================
+function fillRect(x, y, w, h, hex) { ctx.fillStyle = hex; ctx.fillRect(x, y, w, h); }
+
+function roundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+}
+
+// ============================================================
+// BLACKJACK GAME LOGIC
+// ============================================================
+function createDeck() {
+    const d = [];
+    for (let s = 0; s < 4; s++) {
+        for (let r = 0; r < 13; r++) {
+            d.push({ rank: r, suit: s });
+        }
+    }
+    return d;
+}
+
+function shuffleDeck(d) {
+    for (let i = d.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [d[i], d[j]] = [d[j], d[i]];
+    }
+    return d;
+}
+
+function cardValue(rank) {
+    if (rank === 0) return 11; // Ace
+    if (rank >= 10) return 10; // J, Q, K
+    return rank + 1; // 2-10
+}
+
+function handValue(hand) {
+    let total = 0;
+    let aces = 0;
+    for (const c of hand) {
+        total += cardValue(c.rank);
+        if (c.rank === 0) aces++;
+    }
+    while (total > 21 && aces > 0) {
+        total -= 10;
+        aces--;
+    }
+    return total;
+}
+
+function isBlackjack(hand) {
+    return hand.length === 2 && handValue(hand) === 21;
+}
+
+function startRound() {
+    if (netRole !== NetRole.HOST) return;
+    deck = shuffleDeck(createDeck());
+
+    // Reset player hands and bets for active players, deduct bets
+    for (let i = 0; i < MAX_PLAYERS; i++) {
+        const p = gameState.players[i];
+        if (p.active) {
+            p.hands = [[]];
+            p.bet = Math.min(DEFAULT_BET, p.chips);
+            p.chips -= p.bet;
+            p.standing = false;
+            p.busted = false;
+            p.result = 'pending';
+        }
+    }
+
+    // Deal 2 cards to each active player
+    for (let d = 0; d < 2; d++) {
+        for (let i = 0; i < MAX_PLAYERS; i++) {
+            if (gameState.players[i].active) {
+                gameState.players[i].hands[0].push(deck.pop());
+            }
+        }
+    }
+
+    // Deal 2 to dealer (first card hidden)
+    const holeCard = deck.pop();
+    holeCard.hidden = true;
+    gameState.dealer = { hand: [holeCard, deck.pop()], hidden: true };
+
+    // Build turn order (active players in order)
+    gameState.turnOrder = [];
+    for (let i = 0; i < MAX_PLAYERS; i++) {
+        if (gameState.players[i].active) gameState.turnOrder.push(i);
+    }
+
+    // Check for immediate blackjacks
+    for (const pIdx of gameState.turnOrder) {
+        const p = gameState.players[pIdx];
+        if (isBlackjack(p.hands[0])) {
+            p.standing = true;
+            p.result = 'blackjack';
+        }
+    }
+
+    gameState.round++;
+    gameState.message = 'Dealing...';
+
+    // Send initial deal state to clients before any special-case resolution
+    sendGameState();
+    updateUI();
+
+    // If dealer has blackjack, skip player turns
+    if (isBlackjack(gameState.dealer.hand)) {
+        gameState.dealer.hidden = false;
+        gameState.dealer.hand[0].hidden = false;
+        gameState.phase = Phase.DEALER_TURN;
+        gameState.currentPlayer = -1;
+        gameState.message = 'Dealer has Blackjack!';
+        setTimeout(() => resolveRound(), 600);
+        return;
+    }
+
+    // Check if all players finished (all blackjack)
+    const allDone = gameState.turnOrder.every(i => gameState.players[i].standing);
+    if (allDone) {
+        gameState.phase = Phase.DEALER_TURN;
+        gameState.currentPlayer = -1;
+        setTimeout(() => dealerPlay(), 600);
+        return;
+    }
+
+    // Find first player who hasn't already finished (blackjack)
+    let firstTurn = -1;
+    for (const pIdx of gameState.turnOrder) {
+        if (!gameState.players[pIdx].standing && !gameState.players[pIdx].busted) {
+            firstTurn = pIdx;
+            break;
+        }
+    }
+    if (firstTurn >= 0) {
+        gameState.phase = Phase.PLAYING;
+        gameState.currentPlayer = firstTurn;
+        gameState.message = "Player " + (firstTurn + 1) + "'s turn";
+    } else {
+        gameState.phase = Phase.DEALER_TURN;
+        gameState.currentPlayer = -1;
+        gameState.dealer.hidden = false;
+        gameState.dealer.hand[0].hidden = false;
+        setTimeout(() => dealerPlay(), 600);
+    }
+    sendGameState();
+    updateUI();
+}
+
+function nextPlayer() {
+    const curIdx = gameState.turnOrder.indexOf(gameState.currentPlayer);
+    if (curIdx >= 0 && curIdx < gameState.turnOrder.length - 1) {
+        gameState.currentPlayer = gameState.turnOrder[curIdx + 1];
+        gameState.message = "Player " + (gameState.currentPlayer + 1) + "'s turn";
+    } else {
+        // All players done
+        gameState.currentPlayer = -1;
+        gameState.phase = Phase.DEALER_TURN;
+        gameState.dealer.hidden = false;
+        gameState.dealer.hand[0].hidden = false;
+        gameState.message = "Dealer's turn";
+        dealerPlay();
+        return;
+    }
+}
+
+function playerHit(pIdx) {
+    const p = gameState.players[pIdx];
+    if (!p.active || p.standing || p.busted) return;
+    p.hands[0].push(deck.pop());
+    const val = handValue(p.hands[0]);
+    if (val > 21) {
+        p.busted = true;
+        p.result = 'lose';
+        gameState.message = "Player " + (pIdx + 1) + " busts!";
+        advanceAfterAction();
+    } else if (val === 21) {
+        p.standing = true;
+        gameState.message = "Player " + (pIdx + 1) + " stands at 21";
+        advanceAfterAction();
+    } else {
+        gameState.message = "Player " + (pIdx + 1) + " hits: " + val;
+        sendGameState();
+        updateUI();
+    }
+}
+
+function playerStand(pIdx) {
+    const p = gameState.players[pIdx];
+    if (!p.active || p.standing || p.busted) return;
+    p.standing = true;
+    gameState.message = "Player " + (pIdx + 1) + " stands";
+    advanceAfterAction();
+}
+
+function playerDouble(pIdx) {
+    const p = gameState.players[pIdx];
+    if (!p.active || p.standing || p.busted) return;
+    if (p.hands[0].length > 2) return; // only on first two cards
+    if (p.chips < p.bet) return; // not enough chips
+    p.bet *= 2;
+    p.chips -= p.bet / 2; // deduct additional bet
+    p.hands[0].push(deck.pop());
+    const val = handValue(p.hands[0]);
+    p.standing = true;
+    if (val > 21) {
+        p.busted = true;
+        p.result = 'lose';
+        gameState.message = "Player " + (pIdx + 1) + " doubles and busts!";
+    } else {
+        gameState.message = "Player " + (pIdx + 1) + " doubles at " + val;
+    }
+    advanceAfterAction();
+}
+
+function advanceAfterAction() {
+    // Check if all players finished
+    const allDone = gameState.turnOrder.every(i => gameState.players[i].standing || gameState.players[i].busted);
+    if (allDone) {
+        gameState.currentPlayer = -1;
+        if (gameState.phase !== Phase.DEALER_TURN) {
+            gameState.phase = Phase.DEALER_TURN;
+            gameState.dealer.hidden = false;
+            gameState.dealer.hand[0].hidden = false;
+            dealerPlay();
+        } else {
+            sendGameState();
+            updateUI();
+        }
+    } else {
+        nextPlayer();
+        sendGameState();
+        updateUI();
+    }
+}
+
+function dealerPlay() {
+    if (netRole !== NetRole.HOST) return;
+    gameState.dealer.hidden = false;
+    gameState.dealer.hand[0].hidden = false;
+
+    // Check if all players busted — dealer doesn't need to play
+    const allBust = gameState.turnOrder.every(i => gameState.players[i].busted);
+    if (allBust) {
+        gameState.message = 'All players busted!';
+        resolveRound();
+        return;
+    }
+
+    // Dealer draws
+    gameState.message = 'Dealer reveals: ' + RANKS[gameState.dealer.hand[0].rank] + SUITS[gameState.dealer.hand[0].suit];
+    let dealerDone = false;
+    function dealerStep() {
+        const val = handValue(gameState.dealer.hand);
+        if (val < 17) {
+            gameState.dealer.hand.push(deck.pop());
+            const newVal = handValue(gameState.dealer.hand);
+            if (newVal > 21) {
+                gameState.message = 'Dealer busts!';
+                dealerDone = true;
+                sendGameState();
+                updateUI();
+                resolveRound();
+            } else {
+                gameState.message = 'Dealer hits: ' + newVal;
+                sendGameState();
+                updateUI();
+                setTimeout(dealerStep, 800);
+            }
+        } else {
+            gameState.message = 'Dealer stands at ' + val;
+            dealerDone = true;
+            sendGameState();
+            updateUI();
+            resolveRound();
+        }
+    }
+    // Small delay before revealing hole card
+    setTimeout(dealerStep, 600);
+}
+
+function resolveRound() {
+    if (netRole !== NetRole.HOST) return;
+    const dVal = handValue(gameState.dealer.hand);
+    const dBust = dVal > 21;
+
+    for (const pIdx of gameState.turnOrder) {
+        const p = gameState.players[pIdx];
+        if (p.busted) continue;
+        if (p.result === 'blackjack') {
+            // Already set; payout handled below
+            continue;
+        }
+        const pVal = handValue(p.hands[0]);
+        if (pVal > 21) {
+            p.result = 'lose';
+        } else if (dBust) {
+            p.result = 'win';
+        } else if (pVal > dVal) {
+            p.result = 'win';
+        } else if (pVal === dVal) {
+            p.result = 'push';
+        } else {
+            p.result = 'lose';
+        }
+    }
+
+    // Payout
+    for (const pIdx of gameState.turnOrder) {
+        const p = gameState.players[pIdx];
+        let payout = 0;
+        if (p.result === 'blackjack') {
+            payout = Math.floor(p.bet * 1.5) + p.bet; // 3:2
+        } else if (p.result === 'win') {
+            payout = p.bet * 2;
+        } else if (p.result === 'push') {
+            payout = p.bet;
+        }
+        // If they doubled down, the extra bet was already deducted during double()
+        // so payout here should be total including original bet
+        if (p.result === 'win') {
+            // bet*2 means original bet back + winnings of bet
+            // If doubled: bet is doubled, so bet*2 = 2*original_bet back (original + winnings of original*2)
+            // Wait, let me reconsider
+            // Scenario: bet=10, double down -> bet=20, 10 deducted from chips
+            // Then on win: they should get 40 (original 20 back + 20 winnings)
+            // So payout = bet * 2 = 20*2 = 40. Then net change = payout = 40.
+            // But we deducted 10 extra during double, so net change is +30 from original 1000.
+            // Hmm, the way I handle double() is: chips -= bet/2 (the additional bet on top of original)
+            // So chips are already at the "post-bet" level.
+            // If payout = bet*2 (Bet=20, chips after bet deduction = 1000-20=980, payout=40, chips=1020)
+            // Net change: +20. But original bet was 10, so winning 10 means should have 1010.
+            // Wait this is wrong.
+
+            // Let me simplify:
+            // At start of round, we DON'T deduct bets. We just track the bet amount.
+            // At payout time, we compute net change.
+            // If result=win and bet=10: chips += bet (net +10)
+            // If result=win and bet=20 (doubled): chips += bet (net +20)
+            // If result=blackjack: chips += floor(bet*1.5) + bet (original bet back + 1.5x winnings)
+
+            // Actually, let me just track it simply:
+            // - No pre-deduction of bets
+            // - On double down, we DO deduct the additional bet (since we need to track chip counts)
+            // Wait, I should just deduct everything at payout. No deductions during play.
+            // But double down needs to check if player has enough chips...
+
+            // Simplest approach: never deduct during the round. All chips changes at payout.
+            // double() just doubles the bet amount, no chip deduction yet.
+            // At payout:
+            // - blackjack: chips += floor(bet*1.5) (winnings)
+            // - win: chips += bet (winnings)
+            // - push: no change (original bet wasn't deducted)
+            // - lose: chips -= bet (lost)
+
+            // But wait, this doesn't track chips correctly between rounds. Let me think again...
+            // The bet is always available in chips. At payout, we add/subtract from chips.
+            // Player starts with 1000, bets 10, wins: chips = 1000 + 10 = 1010
+            // Player starts with 1000, bets 10, loses: chips = 1000 - 10 = 990
+            // Simple!
+            // For double: bet becomes 20. Win: chips = 1000 + 20 = 1020. Lose: chips = 1000 - 20 = 980. Blackjack: chips = 1000 + 15 = 1015.
+        }
+    }
+
+    // Apply payouts (bets were pre-deducted in startRound)
+    for (const pIdx of gameState.turnOrder) {
+        const p = gameState.players[pIdx];
+        if (p.result === 'blackjack') {
+            p.chips += Math.floor(p.bet * 1.5) + p.bet; // 3:2 + original bet back
+        } else if (p.result === 'win') {
+            p.chips += p.bet * 2; // original bet back + winnings = bet
+        } else if (p.result === 'push') {
+            p.chips += p.bet; // bet returned
+        }
+        // lose: bet stays deducted
+        if (p.chips < 0) p.chips = 0;
+    }
+
+    gameState.phase = Phase.ROUND_OVER;
+    gameState.message = 'Round over! Press DEAL for next round.';
+    sendGameState();
+    updateUI();
+
+    // Check elimination
+    for (const pIdx of gameState.turnOrder) {
+        if (gameState.players[pIdx].chips <= 0) {
+            gameState.players[pIdx].active = false;
+            activePlayerCount--;
+        }
+    }
+}
+
+function handleAction(pIdx, action) {
+    if (netRole !== NetRole.HOST) return;
+    if (gameState.phase !== Phase.PLAYING) return;
+    if (pIdx !== gameState.currentPlayer) return;
+    const p = gameState.players[pIdx];
+    if (p.standing || p.busted) return;
+
+    switch (action) {
+        case Action.HIT:
+            playerHit(pIdx);
+            break;
+        case Action.STAND:
+            playerStand(pIdx);
+            break;
+        case Action.DOUBLE_DOWN:
+            playerDouble(pIdx);
+            break;
+    }
+}
+
+// ============================================================
+// NETWORKING
+// ============================================================
+function sendPkt(dc, type, data) {
+    if (!dc || !dc.open) return false;
+    const len = 1 + (data ? data.byteLength : 0);
+    const buf = new ArrayBuffer(len);
+    const v = new Uint8Array(buf);
+    v[0] = type;
+    if (data) v.set(new Uint8Array(data), 1);
+    dc.send(buf);
+    return true;
+}
+
+function serializeGameState() {
+    const state = JSON.parse(JSON.stringify(gameState));
+    // Hide dealer hole card for non-host network packets
+    if (state.dealer.hidden && state.dealer.hand.length >= 2) {
+        state.dealer.hand[0] = { hidden: true };
+    }
+    return state;
+}
+
+function sendGameState() {
+    if (netRole !== NetRole.HOST) return;
+    const state = serializeGameState();
+    const jsonStr = JSON.stringify(state);
+    const encoder = new TextEncoder();
+    const jsonBytes = encoder.encode(jsonStr);
+    const buf = new ArrayBuffer(1 + jsonBytes.length);
+    const v = new Uint8Array(buf);
+    v[0] = PacketType.GAME_STATE;
+    v.set(jsonBytes, 1);
+    for (let i = 1; i < hostConnections.length; i++) {
+        if (hostConnections[i] && hostConnections[i].open) {
+            hostConnections[i].send(buf);
+        }
+    }
+}
+
+function setupHostDataConnection(conn, slot) {
+    const playerId = slot;
+    let joined = false;
+    conn.on('data', (data) => {
+        const v = new Uint8Array(data);
+        if (v.length < 1) return;
+        const type = v[0];
+        const d = v.slice(1);
+        if (type === PacketType.JOIN_REQUEST && !joined) {
+            if (gameState.players[playerId].active) return;
+            joined = true;
+            gameState.players[playerId].active = true;
+            gameState.players[playerId].chips = DEFAULT_CHIPS;
+            activePlayerCount++;
+            lastAckTick[slot] = tickCounter;
+            const buf = new ArrayBuffer(1);
+            const v2 = new Uint8Array(buf);
+            v2[0] = playerId;
+            sendPkt(conn, PacketType.JOIN_ACCEPT, buf);
+            playerConnectionType[playerId] = 'direct';
+            updateLobbyUI();
+            broadcastLobbyState();
+            setConnectionStatus('Player ' + (playerId + 1) + ' connected!');
+            document.getElementById('host-invite-row').classList.add('hidden');
+            return;
+        }
+        if (!joined) return;
+        if (type === PacketType.PLAYER_ACTION && d.length >= 1) {
+            const action = d[0];
+            handleAction(playerId, action);
+            return;
+        }
+        if (type === PacketType.HEARTBEAT_ACK) {
+            lastAckTick[slot] = tickCounter;
+            return;
+        }
+        if (type === PacketType.PLAYER_LEAVE) {
+            handlePlayerDisconnect(slot);
+            return;
+        }
+    });
+    conn.on('close', () => {
+        handlePlayerDisconnect(slot);
+    });
+}
+
+function handlePlayerDisconnect(slot) {
+    if (slot < 1 || slot >= MAX_PLAYERS) return;
+    if (playerDisconnected[slot]) return;
+    playerDisconnected[slot] = true;
+    if (hostConnections[slot]) {
+        const c = hostConnections[slot];
+        hostConnections[slot] = null;
+        try { c.close(); } catch (e) { }
+    }
+    if (gameState.players[slot].active) {
+        // If it's their turn, auto-stand them
+        if (gameState.currentPlayer === slot && gameState.phase === Phase.PLAYING) {
+            gameState.players[slot].standing = true;
+            advanceAfterAction();
+        }
+        gameState.players[slot].active = false;
+        gameState.players[slot].hands = [[]];
+        playerConnectionType[slot] = '';
+        lastAckTick[slot] = -1;
+        activePlayerCount--;
+        if (appState === AppState.LOBBY) {
+            updateLobbyUI();
+            broadcastLobbyState();
+        }
+    }
+}
+
+function broadcastLobbyState() {
+    const buf = new ArrayBuffer(1 + MAX_PLAYERS * 2);
+    const v = new Uint8Array(buf);
+    v[0] = PacketType.LOBBY_STATE;
+    for (let i = 0; i < MAX_PLAYERS; i++) {
+        v[1 + i] = gameState.players[i].active ? 1 : 0;
+        const ct = playerConnectionType[i];
+        v[1 + MAX_PLAYERS + i] = ct === 'direct' ? 1 : (ct === 'relay' ? 2 : 0);
+    }
+    for (let i = 1; i < hostConnections.length; i++) {
+        if (hostConnections[i] && hostConnections[i].open) hostConnections[i].send(buf);
+    }
+}
+
+function onClientMessage(raw) {
+    const v = new Uint8Array(raw);
+    if (v.length < 1) return;
+    const type = v[0];
+    const data = v.slice(1);
+
+    if (type === PacketType.JOIN_ACCEPT && data.length >= 1) {
+        localPlayerId = data[0];
+        gameState.players[localPlayerId].active = true;
+        activePlayerCount++;
+        netRole = NetRole.CLIENT;
+        setStatusMsg('You are P' + (localPlayerId + 1), 300);
+        setConnectionStatus('Connected to host!');
+        document.getElementById('join-area').classList.add('hidden');
+        pendingConnection = null;
+        updateLobbyUI();
+        updateControllerUI();
+
+    } else if (type === PacketType.GAME_STATE) {
+        lastGameStateTime = Date.now();
+        const decoder = new TextDecoder();
+        const jsonStr = decoder.decode(data);
+        try {
+            const newState = JSON.parse(jsonStr);
+            gameState = newState;
+
+            // Fix players array length if needed (JSON.parse preserves it from host)
+            if (gameState.players.length < MAX_PLAYERS) {
+                for (let i = gameState.players.length; i < MAX_PLAYERS; i++) {
+                    gameState.players.push({
+                        active: false, hands: [[]], bet: DEFAULT_BET,
+                        chips: DEFAULT_CHIPS, standing: false, busted: false, result: 'pending'
+                    });
+                }
+            }
+        } catch (e) {
+            console.error('Failed to parse GAME_STATE:', e);
+            return;
+        }
+
+        if (appState !== AppState.PLAYING) {
+            appState = AppState.PLAYING;
+            hideAllOverlays();
+            canvas.style.display = 'block';
+            document.getElementById('scorebar').classList.remove('hidden-ctrl');
+            document.getElementById('gameover-overlay').classList.add('hidden');
+            updateControllerUI();
+        }
+        updateUI();
+
+    } else if (type === PacketType.LOBBY_STATE && data.length >= MAX_PLAYERS * 2) {
+        let count = 0;
+        for (let i = 0; i < MAX_PLAYERS; i++) {
+            const active = data[i] !== 0;
+            gameState.players[i].active = active;
+            if (active) count++;
+            const ctVal = data[MAX_PLAYERS + i];
+            playerConnectionType[i] = ctVal === 1 ? 'direct' : (ctVal === 2 ? 'relay' : '');
+        }
+        activePlayerCount = count;
+        updateLobbyUI();
+
+    } else if (type === PacketType.HEARTBEAT) {
+        sendPkt(clientConnection, PacketType.HEARTBEAT_ACK, null);
+        lastGameStateTime = Date.now(); // reset disconnect timer
+
+    } else if (type === PacketType.PLAYER_LEAVE) {
+        setStatusMsg('Host disconnected', 300);
+        cleanupClient();
+        appState = AppState.MENU;
+        showMenu();
+        updateControllerUI();
+    }
+}
+
+function cleanupHost() {
+    for (let i = 1; i < hostConnections.length; i++) {
+        if (hostConnections[i]) { try { hostConnections[i].close(); } catch (e) { } }
+        hostConnections[i] = null;
+    }
+    lastAckTick = new Array(MAX_PLAYERS).fill(-1);
+    playerDisconnected = new Array(MAX_PLAYERS).fill(false);
+    if (hostPeer) { try { hostPeer.destroy(); } catch (e) { } }
+    hostPeer = null;
+    netRole = NetRole.NONE;
+    activePlayerCount = 0;
+    localPlayerId = -1;
+    playerConnectionType = new Array(MAX_PLAYERS).fill('');
+    clearIceStatus();
+    document.getElementById('host-invite-row').classList.add('hidden');
+}
+
+function cleanupClient() {
+    if (pendingConnection) { try { pendingConnection.close(); } catch (e) { } pendingConnection = null; }
+    if (clientConnection) { try { clientConnection.close(); } catch (e) { } clientConnection = null; }
+    if (clientPeer) { try { clientPeer.destroy(); } catch (e) { } clientPeer = null; }
+    netRole = NetRole.NONE;
+    localPlayerId = -1;
+    clearIceStatus();
+}
+
+function cleanupAll() { cleanupHost(); cleanupClient(); }
+
+// ============================================================
+// UI CONTROL
+// ============================================================
+function hideAllOverlays() {
+    document.getElementById('menu-overlay').classList.add('hidden');
+    document.getElementById('lobby-overlay').classList.add('hidden');
+    document.getElementById('gameover-overlay').classList.add('hidden');
+}
+
+function showMenu() {
+    hideAllOverlays();
+    document.getElementById('menu-overlay').classList.remove('hidden');
+    document.getElementById('controller-area').classList.add('hidden-ctrl');
+    document.getElementById('scorebar').classList.add('hidden-ctrl');
+    canvas.style.display = 'none';
+    appState = AppState.MENU;
+}
+
+let statusMsgTimeout = null;
+function setStatusMsg(msg, duration) {
+    const el = document.getElementById('menu-status');
+    if (el) {
+        el.textContent = msg;
+        el.style.color = msg.toLowerCase().includes('fail') ? '#FF4444' : '#CCCCCC';
+        if (statusMsgTimeout) clearTimeout(statusMsgTimeout);
+        if (duration) statusMsgTimeout = setTimeout(() => { if (el) el.textContent = ''; }, duration * 1000 / 60);
+    }
+}
+
+function setConnectionStatus(msg) {
+    const el1 = document.getElementById('sdp-status');
+    const el2 = document.getElementById('join-status');
+    if (el1) el1.textContent = msg;
+    if (el2) el2.textContent = msg;
+}
+
+function setIceStatus(msg, color) {
+    document.querySelectorAll('.conn-msg').forEach(el => {
+        el.textContent = msg;
+        el.style.color = color || '#8888AA';
+    });
+}
+
+function clearIceStatus() {
+    document.querySelectorAll('.conn-msg').forEach(el => {
+        el.textContent = '';
+        el.style.color = '';
+    });
+}
+
+// ============================================================
+// CONTROLLER UI VISIBILITY
+// ============================================================
+function updateControllerUI() {
+    const ctrl = document.getElementById('controller-area');
+    const btnDeal = document.getElementById('btn-start-game');
+    const btnQuit = document.getElementById('btn-quit-game');
+    const btnHit = document.getElementById('btn-hit');
+    const btnStand = document.getElementById('btn-stand');
+    const btnDouble = document.getElementById('btn-double');
+
+    if (appState === AppState.MENU) {
+        ctrl.classList.add('hidden-ctrl');
+        return;
+    }
+    ctrl.classList.remove('hidden-ctrl');
+
+    if (appState === AppState.LOBBY) {
+        ctrl.classList.add('hidden-ctrl');
+        btnHit.classList.add('hidden-btn');
+        btnStand.classList.add('hidden-btn');
+        btnDouble.classList.add('hidden-btn');
+        btnDeal.classList.add('hidden-btn');
+        btnQuit.classList.remove('hidden-btn');
+    } else if (appState === AppState.PLAYING) {
+        const isMyTurn = (gameState.currentPlayer === localPlayerId && gameState.phase === Phase.PLAYING);
+        const p = gameState.players[localPlayerId];
+        const canAct = isMyTurn && p && !p.standing && !p.busted;
+        ctrl.classList.toggle('turn-active', isMyTurn && canAct);
+
+        // Hit button
+        btnHit.classList.remove('hidden-btn');
+        btnHit.disabled = !canAct;
+
+        // Stand button
+        btnStand.classList.remove('hidden-btn');
+        btnStand.disabled = !canAct;
+
+        // Double button: only on first 2 cards, enough chips
+        btnDouble.classList.remove('hidden-btn');
+        btnDouble.disabled = !canAct || !p || p.hands[0].length > 2 || p.chips < p.bet;
+
+        // Deal button
+        const canDeal = gameState.phase === Phase.ROUND_OVER || gameState.phase === Phase.BETTING;
+        btnDeal.classList.toggle('hidden-btn', !canDeal || netRole !== NetRole.HOST);
+        btnDeal.disabled = (netRole === NetRole.HOST && activePlayerCount < 1);
+
+        btnQuit.classList.remove('hidden-btn');
+    }
+}
+
+// ============================================================
+// ACTION BUTTONS
+// ============================================================
+function onActionStart() {
+    if (appState === AppState.LOBBY && netRole === NetRole.HOST && activePlayerCount >= 1) {
+        // Transition from lobby to playing
+        appState = AppState.PLAYING;
+        hideAllOverlays();
+        canvas.style.display = 'block';
+        document.getElementById('scorebar').classList.remove('hidden-ctrl');
+        document.getElementById('gameover-overlay').classList.add('hidden');
+        startRound();
+        updateControllerUI();
+    } else if (appState === AppState.PLAYING && netRole === NetRole.HOST) {
+        if (gameState.phase === Phase.ROUND_OVER || gameState.phase === Phase.BETTING) {
+            startRound();
+            updateControllerUI();
+        }
+    }
+}
+
+function onActionQuit() {
+    if (appState === AppState.LOBBY) {
+        if (netRole === NetRole.CLIENT) cancelJoin();
+        else { cleanupHost(); showMenu(); }
+    } else if (appState === AppState.PLAYING) {
+        cleanupAll();
+        appState = AppState.MENU;
+        showMenu();
+    }
+    updateControllerUI();
+}
+
+// ===== Friendly Peer ID with retry =====
+function createPeerWithFriendlyId() {
+    return new Promise((resolve, reject) => {
+        let attempts = 0;
+        function tryCreate() {
+            const id = generateFriendlyId();
+            const p = new Peer(id, { config: ICE_CONFIG });
+            p.on('open', () => resolve({ peer: p, id: p.id }));
+            p.on('error', (err) => {
+                if (err.type === 'id-taken' && attempts < 5) {
+                    attempts++;
+                    p.destroy();
+                    tryCreate();
+                } else { reject(err); }
+            });
+        }
+        tryCreate();
+    });
+}
+
+function initBlackjackGame() {
+    deck = shuffleDeck(createDeck());
+    for (let i = 0; i < MAX_PLAYERS; i++) {
+        const p = gameState.players[i];
+        p.hands = [[]];
+        p.bet = DEFAULT_BET;
+        p.chips = DEFAULT_CHIPS;
+        p.standing = false;
+        p.busted = false;
+        p.result = 'pending';
+    }
+    gameState.dealer = { hand: [], hidden: true };
+    gameState.phase = Phase.BETTING;
+    gameState.currentPlayer = -1;
+    gameState.round = 0;
+    gameState.turnOrder = [];
+    gameState.message = 'Press DEAL to start a round!';
+}
+
+// ===== CREATE GAME (HOST) =====
+async function createGame() {
+    cleanupAll();
+    netRole = NetRole.HOST;
+
+    // Initialize players
+    for (let i = 0; i < MAX_PLAYERS; i++) {
+        gameState.players[i] = {
+            active: false,
+            hands: [[]],
+            bet: DEFAULT_BET,
+            chips: DEFAULT_CHIPS,
+            standing: false,
+            busted: false,
+            result: 'pending'
+        };
+    }
+    gameState.players[0].active = true;
+    gameState.players[0].chips = DEFAULT_CHIPS;
+    gameState.players[0].hands = [[]];
+    activePlayerCount = 1;
+    localPlayerId = 0;
+    playerConnectionType = new Array(MAX_PLAYERS).fill('');
+    playerConnectionType[0] = 'direct';
+    gameState.dealer = { hand: [], hidden: true };
+    gameState.phase = Phase.BETTING;
+    gameState.currentPlayer = -1;
+    gameState.round = 0;
+    gameState.turnOrder = [];
+    gameState.message = 'Press DEAL to start!';
+    deck = shuffleDeck(createDeck());
+
+    appState = AppState.LOBBY;
+    hideAllOverlays();
+    canvas.style.display = 'none';
+    document.getElementById('lobby-overlay').classList.remove('hidden');
+    document.getElementById('lobby-actions').style.display = 'flex';
+    updateLobbyUI();
+    updateControllerUI();
+
+    try {
+        const result = await createPeerWithFriendlyId();
+        hostPeer = result.peer;
+        hostPeer.on('connection', (conn) => {
+            let slot = -1;
+            for (let i = 1; i < MAX_PLAYERS; i++) { if (!hostConnections[i]) { slot = i; break; } }
+            if (slot === -1) { try { conn.close(); } catch (e) { } return; }
+            hostConnections[slot] = conn;
+            playerDisconnected[slot] = false;
+            setupHostDataConnection(conn, slot);
+        });
+        hostPeer.on('error', (err) => {
+            console.error('PeerJS error:', err);
+            setConnectionStatus('Error: ' + err.type);
+        });
+        setConnectionStatus('Your game ID: ' + result.id);
+        const link = window.location.origin + window.location.pathname + '?join=' + result.id;
+        document.getElementById('invite-link-input').value = link;
+        document.getElementById('host-invite-row').classList.remove('hidden');
+        document.getElementById('lobby-wait-msg').textContent = 'Share the invite link with friends!';
+    } catch (e) {
+        console.error('Failed to create peer:', e);
+        setConnectionStatus('Failed to create game. Try again.');
+    }
+
+    try {
+        const resp = await fetch('https://api.ipify.org?format=json');
+        const data = await resp.json();
+        document.getElementById('host-ip-info').textContent = 'Public IP: ' + data.ip + ' : 1234';
+    } catch (e) {
+        document.getElementById('host-ip-info').textContent = 'LAN mode (share IP manually)';
+    }
+}
+
+// ===== HOST: Copy invite link =====
+function copyInviteLink() {
+    const input = document.getElementById('invite-link-input');
+    input.select();
+    input.setSelectionRange(0, 9999999);
+    navigator.clipboard.writeText(input.value).then(() => {
+        document.getElementById('btn-copy-link').textContent = 'Copied!';
+        setTimeout(() => { document.getElementById('btn-copy-link').textContent = 'Copy Link'; }, 2000);
+    }).catch(() => {
+        document.execCommand('copy');
+        document.getElementById('btn-copy-link').textContent = 'Copied!';
+        setTimeout(() => { document.getElementById('btn-copy-link').textContent = 'Copy Link'; }, 2000);
+    });
+}
+
+// ===== JOIN GAME (CLIENT) =====
+function showJoinUI() {
+    document.getElementById('menu-overlay').classList.add('hidden');
+    document.getElementById('lobby-overlay').classList.remove('hidden');
+    canvas.style.display = 'none';
+    document.getElementById('host-ip-info').textContent = '';
+    document.getElementById('host-invite-row').classList.add('hidden');
+    document.getElementById('lobby-wait-msg').textContent = '';
+    clearIceStatus();
+    document.getElementById('lobby-actions').style.display = 'none';
+    document.getElementById('join-area').classList.remove('hidden');
+    document.getElementById('join-input').value = '';
+    document.getElementById('join-input').style.display = '';
+    document.getElementById('join-status').textContent = '';
+    document.getElementById('btn-join-submit').textContent = 'Join';
+    document.getElementById('btn-join-submit').disabled = false;
+    document.getElementById('btn-join-submit').onclick = manualJoin;
+    appState = AppState.LOBBY;
+    netRole = NetRole.NONE;
+    updateLobbyUI();
+    updateControllerUI();
+}
+
+async function manualJoin() {
+    const input = document.getElementById('join-input').value.trim();
+    if (!input) { document.getElementById('join-status').textContent = "Enter the host's peer ID or invite link."; return; }
+    let peerId = input;
+    try {
+        const url = new URL(input);
+        const j = url.searchParams.get('join');
+        if (j) peerId = j;
+    } catch (e) { /* not a URL */ }
+    document.getElementById('join-status').textContent = 'Connecting...';
+    await connectToHost(peerId, true);
+}
+
+async function connectToHost(peerId, autoJoin) {
+    if (clientPeer) { cleanupClient(); }
+    pendingConnection = null;
+
+    const CONNECT_TIMEOUT_MS = 20000;
+    let resolved = false;
+    const showRetryError = (msg) => {
+        document.getElementById('join-status').textContent = msg;
+        document.getElementById('btn-join-submit').textContent = 'Retry';
+        document.getElementById('btn-join-submit').disabled = false;
+        document.getElementById('btn-join-submit').onclick = () => connectToHost(peerId, !!autoJoin);
+    };
+    const timer = setTimeout(() => {
+        if (resolved) return;
+        resolved = true;
+        cleanupClient();
+        showRetryError('Connection timed out. Could not reach host.');
+    }, CONNECT_TIMEOUT_MS);
+
+    clientPeer = new Peer({ config: ICE_CONFIG });
+    clientPeer.on('open', () => {
+        document.getElementById('join-status').textContent = 'Connecting to host...';
+        const conn = clientPeer.connect(peerId);
+        pendingConnection = conn;
+        conn.on('open', () => {
+            if (resolved) return;
+            resolved = true;
+            clearTimeout(timer);
+            if (autoJoin) {
+                doJoin();
+            } else {
+                document.getElementById('join-status').textContent = 'Game found! Click JOIN to connect.';
+                document.getElementById('btn-join-submit').textContent = 'JOIN GAME';
+                document.getElementById('btn-join-submit').disabled = false;
+                document.getElementById('btn-join-submit').onclick = doJoin;
+                document.getElementById('join-input').style.display = 'none';
+            }
+        });
+        conn.on('data', onClientMessage);
+        conn.on('close', () => {
+            if (clientConnection) {
+                setStatusMsg('Disconnected from host', 300);
+                cleanupClient();
+                appState = AppState.MENU;
+                showMenu();
+                updateControllerUI();
+            } else {
+                if (timer) clearTimeout(timer);
+                showRetryError('Connection lost. The host may have left.');
+            }
+        });
+        conn.on('error', (err) => {
+            console.error('DataConnection error:', err);
+            if (clientConnection) {
+                cleanupClient();
+                appState = AppState.MENU;
+                showMenu();
+                updateControllerUI();
+            } else {
+                if (timer) clearTimeout(timer);
+                showRetryError('Connection error: ' + err);
+            }
+        });
+    });
+    clientPeer.on('error', (err) => {
+        if (resolved) return;
+        resolved = true;
+        clearTimeout(timer);
+        console.error('Client PeerJS error:', err);
+        cleanupClient();
+        const friendly = {
+            'browser-incompatible': 'Your browser is not supported for WebRTC connections',
+            'disconnected': 'Lost connection to the signaling server',
+            'invalid-id': 'The host ID provided is not valid',
+            'network': 'Network error. Check your internet connection.',
+            'peer-unavailable': 'Host not found. The game may have ended.',
+            'webrtc': 'WebRTC connection failed. Check your firewall settings.'
+        };
+        showRetryError(friendly[err.type] || 'Connection failed: ' + err.type);
+    });
+}
+
+function doJoin() {
+    if (clientConnection) return;
+    const conn = pendingConnection;
+    if (!conn || !conn.open) return;
+    const buf = new ArrayBuffer(1);
+    const v = new Uint8Array(buf);
+    v[0] = PacketType.JOIN_REQUEST;
+    conn.send(buf);
+    clientConnection = conn;
+    document.getElementById('join-status').textContent = 'Joining game...';
+    document.getElementById('btn-join-submit').disabled = true;
+}
+
+function cancelJoin() {
+    cleanupClient();
+    document.getElementById('lobby-overlay').classList.add('hidden');
+    document.getElementById('menu-overlay').classList.remove('hidden');
+    document.getElementById('controller-area').classList.add('hidden-ctrl');
+    document.getElementById('scorebar').classList.add('hidden-ctrl');
+    canvas.style.display = 'none';
+    appState = AppState.MENU;
+}
+
+// ===== AUTO-JOIN FROM URL =====
+function checkAutoJoin() {
+    const params = new URLSearchParams(window.location.search);
+    const joinId = params.get('join');
+    if (joinId) {
+        setTimeout(() => {
+            showJoinUI();
+            document.getElementById('join-input').value = joinId;
+            document.getElementById('join-input').style.display = 'none';
+            document.getElementById('btn-join-submit').disabled = true;
+            document.getElementById('btn-join-submit').textContent = 'Looking...';
+            connectToHost(joinId);
+        }, 500);
+    }
+}
+
+// ============================================================
+// UPDATE LOBBY UI
+// ============================================================
+function updateLobbyUI() {
+    document.getElementById('player-count').textContent = activePlayerCount;
+    const listEl = document.getElementById('player-list');
+    let html = '';
+    const playerColors = ['#FFD700', '#44BBFF', '#FF6B6B', '#66DD88'];
+    for (let i = 0; i < MAX_PLAYERS; i++) {
+        if (gameState.players[i].active) {
+            const color = playerColors[i];
+            const you = (i === localPlayerId) ? ' (YOU)' : '';
+            const ctype = playerConnectionType[i];
+            html += '<div class="p-entry"><span class="connected-dot" style="background:' + color + '"></span>Player ' + (i + 1) + you + (i === 0 ? ' (Host/Dealer)' : (ctype ? ' (' + ctype.charAt(0).toUpperCase() + ctype.slice(1) + ')' : '')) + '</div>';
+        }
+    }
+    listEl.innerHTML = html;
+    const startHint = document.getElementById('start-hint');
+    const btnLobbyStart = document.getElementById('btn-lobby-start');
+    if (netRole === NetRole.HOST && activePlayerCount >= 1) {
+        const inviteRow = document.getElementById('host-invite-row');
+        startHint.classList.toggle('hidden', inviteRow.classList.contains('hidden'));
+        btnLobbyStart.style.display = 'inline-block';
+    } else {
+        startHint.classList.add('hidden');
+        btnLobbyStart.style.display = 'none';
+    }
+    if (netRole === NetRole.HOST) {
+        document.getElementById('lobby-title').textContent = 'LOBBY (HOST)';
+        document.getElementById('lobby-wait-msg').textContent = 'Tap DEAL or press SPACE to begin!';
+    } else if (netRole === NetRole.CLIENT) {
+        document.getElementById('lobby-title').textContent = 'LOBBY';
+        document.getElementById('lobby-wait-msg').textContent = 'Waiting for host to start...';
+    } else {
+        document.getElementById('lobby-title').textContent = 'LOBBY';
+        document.getElementById('lobby-wait-msg').textContent = 'Enter the invite link or peer ID to join.';
+    }
+}
+
+// ============================================================
+// IN-GAME UI UPDATES
+// ============================================================
+function updateUI() {
+    if (appState !== AppState.PLAYING) return;
+    updateInfoBar();
+    updateGameOverOverlay();
+    updateControllerUI();
+
+    const hintEl = document.getElementById('game-hint');
+    if (gameState.message) {
+        hintEl.textContent = gameState.message;
+    } else {
+        hintEl.textContent = '';
+    }
+}
+
+function updateInfoBar() {
+    if (appState !== AppState.PLAYING) return;
+    const listEl = document.getElementById('score-player-list');
+    let html = '';
+    const playerColors = ['#FFD700', '#44BBFF', '#FF6B6B', '#66DD88'];
+
+    for (let i = 0; i < MAX_PLAYERS; i++) {
+        if (!gameState.players[i].active) continue;
+        const p = gameState.players[i];
+        const color = playerColors[i];
+        const you = (i === localPlayerId) ? ' (You)' : '';
+        let statusText = '';
+        let statusColor = color;
+
+        if (gameState.phase === Phase.PLAYING || gameState.phase === Phase.DEALER_TURN) {
+            if (p.busted) { statusText = 'BUST';
+                statusColor = '#FF4444'; } else if (p.result === 'blackjack') { statusText = 'BJ!';
+                statusColor = '#FFD700'; } else if (p.standing) { statusText = String(handValue(p.hands[0]));
+                statusColor = '#88FF88'; } else if (i === gameState.currentPlayer) { statusText = '▶ TURN';
+                statusColor = '#FFFF00'; } else { statusText = String(handValue(p.hands[0])); }
+        } else if (gameState.phase === Phase.ROUND_OVER) {
+            if (p.result === 'win') { statusText = 'WIN +' + p.bet;
+                statusColor = '#88FF88'; } else if (p.result === 'blackjack') { statusText = 'BJ +' + Math.floor(p.bet * 1.5);
+                statusColor = '#FFD700'; } else if (p.result === 'push') { statusText = 'PUSH';
+                statusColor = '#AAAAAA'; } else if (p.busted) { statusText = 'BUST -' + p.bet;
+                statusColor = '#FF4444'; } else { statusText = 'LOSE -' + p.bet;
+                statusColor = '#FF4444'; }
+        }
+
+        html += '<div class="score-player-entry">';
+        html += '<div class="score-player-name" style="color:' + color + '">P' + (i + 1) + you + '</div>';
+        html += '<div class="score-player-chips" style="color:#CCCCCC">$' + p.chips + '</div>';
+        html += '<div class="score-player-status" style="color:' + statusColor + '">' + statusText + '</div>';
+        html += '</div>';
+    }
+    listEl.innerHTML = html;
+}
+
+function updateGameOverOverlay() {
+    const overlay = document.getElementById('gameover-overlay');
+    // Only show game over if playing and there's an elimination situation
+    // For simplicity, only show when someone hits 0 chips or round ends with 1 active
+}
+
+// ============================================================
+// RENDERING
+// ============================================================
+function renderMenu() { fillRect(0, 0, WIN_W, WIN_H, '#0D0D1A'); }
+function renderLobby() { fillRect(0, 0, WIN_W, WIN_H, '#0D0D1A'); }
+
+function drawCardFace(cx, cy, card) {
+    const w = CARD_W;
+    const h = CARD_H;
+    const r = Math.max(2, Math.floor(w * 0.15));
+    const rankStr = RANKS[card.rank];
+    const suitStr = SUITS[card.suit];
+    const color = SUIT_COLORS[card.suit];
+
+    // Subtle card background (semi-transparent white, no shadow, no border)
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.beginPath();
+    roundRect(ctx, cx, cy, w, h, r);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.12)';
+    ctx.lineWidth = 0.5;
+    ctx.stroke();
+
+    // Larger centered rank+suit string
+    ctx.fillStyle = color;
+    const fontSize = Math.max(10, Math.min(
+        Math.floor(w * 0.38),
+        Math.floor(h * 0.36)
+    ));
+    ctx.font = 'bold ' + fontSize + 'px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(rankStr + suitStr, cx + w / 2, cy + h / 2);
+}
+
+function drawCardBack(cx, cy) {
+    const w = CARD_W;
+    const h = CARD_H;
+    const r = Math.max(2, Math.floor(w * 0.15));
+
+    // Solid back background
+    ctx.fillStyle = '#1a3a6e';
+    ctx.beginPath();
+    roundRect(ctx, cx, cy, w, h, r);
+    ctx.fill();
+
+    // Simple inner accent
+    const pad = Math.floor(w * 0.15);
+    ctx.fillStyle = 'rgba(255,255,255,0.08)';
+    roundRect(ctx, cx + pad, cy + pad, w - pad * 2, h - pad * 2, Math.floor(r * 0.5));
+    ctx.fill();
+
+    // Center spade motif
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    const iconSize = Math.floor(h * 0.35);
+    ctx.font = iconSize + 'px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('♠', cx + w / 2, cy + h / 2);
+}
+
+function drawCard(cx, cy, cardObj, animKey) {
+    if (cardObj && cardObj.hidden) {
+        drawCardBack(cx, cy);
+    } else if (cardObj && cardObj.rank !== undefined) {
+        const anim = animKey && _flipAnims[animKey];
+        if (anim) {
+            const elapsed = performance.now() - anim.start;
+            if (elapsed < FLIP_MS) {
+                const progress = elapsed / FLIP_MS;
+                const scaleX = progress < 0.5 ? 1 - progress * 2 : (progress - 0.5) * 2;
+                ctx.save();
+                ctx.translate(cx + CARD_W / 2, 0);
+                ctx.scale(scaleX, 1);
+                ctx.translate(-(cx + CARD_W / 2), 0);
+                if (progress < 0.5) {
+                    drawCardBack(cx, cy);
+                } else {
+                    drawCardFace(cx, cy, cardObj);
+                }
+                ctx.restore();
+                return;
+            }
+            delete _flipAnims[animKey];
+        }
+        drawCardFace(cx, cy, cardObj);
+    }
+}
+
+function spawnExplosion(cx, cy) {
+    const colors = ['#FFD700','#FF6B6B','#44BBFF','#66DD88','#FFA500','#FF4444','#FFFFFF'];
+    for (let i = 0; i < 70; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 1 + Math.random() * 5;
+        particles.push({
+            x: cx, y: cy,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed - 1.5,
+            size: 2 + Math.random() * 5,
+            color: colors[Math.floor(Math.random() * colors.length)],
+            life: 1,
+            decay: 0.006 + Math.random() * 0.014
+        });
+    }
+}
+
+function updateParticles() {
+    for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += 0.06;
+        p.vx *= 0.98;
+        p.life -= p.decay;
+        if (p.life <= 0) { particles.splice(i, 1); continue; }
+        ctx.globalAlpha = p.life;
+        ctx.fillStyle = p.color;
+        ctx.fillRect(p.x - p.size/2, p.y - p.size/2, p.size, p.size);
+    }
+    ctx.globalAlpha = 1;
+}
+
+function renderBJGame() {
+    const sectionH = Math.floor(WIN_H / 5);
+    CARD_H = Math.max(18, Math.min(Math.floor(sectionH * 0.40), 60));
+    CARD_W = Math.floor(CARD_H / 1.4);
+
+    // Detect new cards and start flip animations
+    const _now = performance.now();
+    function _checkHand(key, hand) {
+        const prev = _prevCardCounts[key] || 0;
+        for (let i = prev; i < hand.length; i++) {
+            _flipAnims[key + '-c' + i] = { start: _now };
+        }
+        _prevCardCounts[key] = hand.length;
+    }
+    _checkHand('dealer', gameState.dealer.hand || []);
+    for (let pIdx = 0; pIdx < MAX_PLAYERS; pIdx++) {
+        const p = gameState.players[pIdx];
+        for (let hi = 0; hi < (p.hands ? p.hands.length : 0); hi++) {
+            _checkHand('p' + pIdx + 'h' + hi, p.hands[hi]);
+        }
+    }
+    for (const k in _flipAnims) {
+        if (_now - _flipAnims[k].start >= FLIP_MS) delete _flipAnims[k];
+    }
+
+    // Green felt background
+    fillRect(0, 0, WIN_W, WIN_H, '#0e4a1e');
+
+    // Radial gradient for grass-table depth (lighter center, darker edges)
+    const grad = ctx.createRadialGradient(WIN_W/2, WIN_H/2, 0, WIN_W/2, WIN_H/2, WIN_W*0.7);
+    grad.addColorStop(0, 'rgba(50,160,70,0.15)');
+    grad.addColorStop(1, 'rgba(0,0,0,0.2)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, WIN_W, WIN_H);
+
+    // Section dividers
+    ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+    ctx.lineWidth = 1;
+    for (let s = 1; s < 5; s++) {
+        const y = s * sectionH;
+        ctx.beginPath();
+        ctx.moveTo(10, y);
+        ctx.lineTo(WIN_W - 10, y);
+        ctx.stroke();
+    }
+
+    const playerColors = ['#FFD700', '#44BBFF', '#FF6B6B', '#66DD88'];
+    const playerBgActive = [
+        'rgba(255,215,0,0.25)',   // P1 gold
+        'rgba(68,187,255,0.25)',  // P2 blue
+        'rgba(255,107,107,0.25)', // P3 red
+        'rgba(102,221,136,0.25)'  // P4 green
+    ];
+    const cardGap = Math.floor(CARD_W * 0.15);
+
+    // ---- DEALER SECTION (index 0) ----
+    const dealerLabelY = Math.floor(sectionH * 0.08);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = 'bold ' + Math.max(12, Math.floor(CARD_H * 0.26)) + 'px monospace';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillText('DEALER', 10, dealerLabelY);
+
+    const dealerCards = gameState.dealer.hand || [];
+    const dealerTotalWidth = dealerCards.length * CARD_W + (dealerCards.length - 1) * cardGap;
+    let dealerCX = (WIN_W - dealerTotalWidth) / 2;
+    const dealerCardY = Math.floor(sectionH * 0.32);
+
+    for (let ci = 0; ci < dealerCards.length; ci++) {
+        drawCard(dealerCX, dealerCardY, dealerCards[ci], 'dealer-c' + ci);
+        dealerCX += CARD_W + cardGap;
+    }
+
+    // Dealer total
+    const showTotal = dealerCards.length > 0 && (gameState.phase === Phase.DEALER_TURN || gameState.phase === Phase.ROUND_OVER || gameState.dealer.hidden === false);
+    if (dealerCards.length > 0) {
+        if (showTotal) {
+            const dVal = handValue(dealerCards);
+            ctx.font = 'bold ' + Math.max(12, Math.floor(CARD_H * 0.26)) + 'px monospace';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'top';
+            const totalStr = dVal > 21 ? 'BUST' : (isBlackjack(dealerCards) ? '21 - BLACKJACK' : String(dVal));
+            if (isBlackjack(dealerCards)) {
+                const hue = (performance.now() * 0.12) % 360;
+                ctx.shadowColor = 'hsl(' + hue + ', 100%, 60%)';
+                ctx.shadowBlur = 14;
+            }
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillText(totalStr, 10, dealerCardY + CARD_H + 4);
+            ctx.shadowBlur = 0;
+        } else {
+            let visibleVal = 0;
+            for (const c of dealerCards) {
+                if (!c.hidden && c.rank !== undefined) visibleVal += cardValue(c.rank);
+            }
+            ctx.fillStyle = '#AAAAAA';
+            ctx.font = Math.max(13, Math.floor(CARD_H * 0.26)) + 'px monospace';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'top';
+            ctx.fillText('Showing: ' + (visibleVal > 0 ? String(visibleVal) : '?'), 10, dealerCardY + CARD_H + 4);
+        }
+    }
+
+    // Dealer blackjack explosion
+    if (isBlackjack(dealerCards) && showTotal && !_dealerBJShown) {
+        _dealerBJShown = true;
+        spawnExplosion(WIN_W / 2, dealerCardY);
+    }
+    if (!isBlackjack(dealerCards) || !showTotal) {
+        _dealerBJShown = false;
+    }
+
+    // ---- PLAYER SECTIONS (indices 0-3, each at section 1-4) ----
+    for (let pIdx = 0; pIdx < MAX_PLAYERS; pIdx++) {
+        const y = (pIdx + 1) * sectionH;
+        const p = gameState.players[pIdx];
+        const isActive = p.active;
+        const isCurrent = (pIdx === gameState.currentPlayer && gameState.phase === Phase.PLAYING);
+        const color = playerColors[pIdx];
+
+        // Player area background tint
+        if (gameState.phase === Phase.ROUND_OVER && isActive) {
+            if (p.result === 'win' || p.result === 'blackjack') {
+                ctx.fillStyle = 'rgba(60,220,60,0.30)';
+            } else if (p.result === 'push') {
+                ctx.fillStyle = 'rgba(200,200,200,0.25)';
+            } else if (p.result === 'lose') {
+                ctx.fillStyle = 'rgba(240,60,60,0.30)';
+            } else {
+                ctx.fillStyle = 'rgba(255,255,255,0.04)';
+            }
+        } else if (isCurrent) {
+            ctx.fillStyle = playerBgActive[pIdx];
+        } else {
+            ctx.fillStyle = isActive ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.015)';
+        }
+        ctx.beginPath();
+        roundRect(ctx, 6, y + 4, WIN_W - 12, sectionH - 8, 4);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        // Player name
+        const nameY = y + Math.floor(sectionH * 0.10);
+        ctx.fillStyle = isCurrent ? color : (isActive ? color : '#555555');
+        ctx.font = 'bold ' + Math.max(12, Math.floor(CARD_H * 0.26)) + 'px monospace';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'top';
+        let nameStr = 'P' + (pIdx + 1) + (pIdx === localPlayerId ? ' (You)' : '');
+        if (!isActive) nameStr += ' (Empty)';
+        ctx.fillText(nameStr, 16, nameY);
+
+        if (isActive) {
+            // Chip count
+            const chipsY = y + Math.floor(sectionH * 0.26);
+            ctx.fillStyle = '#CCCCCC';
+            ctx.font = Math.max(10, Math.floor(CARD_H * 0.22)) + 'px monospace';
+            ctx.fillText('$' + p.chips + '  Bet: $' + p.bet, 16, chipsY);
+
+            // Cards — fixed position, value text below with padding
+            const valFont = Math.max(12, Math.floor(CARD_H * 0.26));
+            const cardY = y + Math.floor(sectionH * 0.38);
+
+            for (let hi = 0; hi < (p.hands ? p.hands.length : 0); hi++) {
+                const hand = p.hands[hi];
+                let cardX = 16 + hi * (CARD_W + cardGap) * 0.3;
+                for (let ci = 0; ci < hand.length; ci++) {
+                    drawCard(cardX, cardY, hand[ci], 'p' + pIdx + 'h' + hi + '-c' + ci);
+                    cardX += CARD_W + cardGap;
+                }
+            }
+
+            // Hand value — dedicated space at bottom of section
+            if (p.hands && p.hands[0] && p.hands[0].length > 0) {
+                const val = handValue(p.hands[0]);
+                let valStr = '';
+                if (p.busted) valStr = 'BUST';
+                else if (p.result === 'blackjack') valStr = 'BLACKJACK!';
+                else valStr = String(val);
+                ctx.fillStyle = p.busted ? '#FF4444' : (p.result === 'blackjack' ? '#FFD700' : '#FFFFFF');
+                ctx.font = 'bold ' + valFont + 'px monospace';
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'top';
+                ctx.fillText(valStr, 16, Math.min(cardY + CARD_H + 8, y + sectionH - valFont - 3));
+            }
+        }
+
+    }
+}
+
+updateParticles();
+
+let _prevState = -1;
+function renderDispatch() {
+    if (appState !== _prevState) {
+        resizeGame();
+        _prevState = appState;
+    }
+    ctx.clearRect(0, 0, WIN_W, WIN_H);
+    switch (appState) {
+        case AppState.MENU:
+            renderMenu();
+            break;
+        case AppState.LOBBY:
+            renderLobby();
+            break;
+        case AppState.PLAYING:
+            renderBJGame();
+            updateInfoBar();
+            updateGameOverOverlay();
+            break;
+    }
+}
+
+// ============================================================
+// INPUT: KEYBOARD
+// ============================================================
+document.addEventListener('keydown', (e) => {
+    if (e.repeat) return;
+
+    if (appState === AppState.MENU) {
+        switch (e.key) {
+            case '1':
+                if (!document.getElementById('menu-overlay').classList.contains('hidden')) createGame();
+                break;
+            case '2':
+                if (!document.getElementById('menu-overlay').classList.contains('hidden')) showJoinUI();
+                break;
+            case 'x':
+            case 'X':
+            case 'Escape':
+                window.close();
+                break;
+        }
+        return;
+    }
+
+    if (appState === AppState.LOBBY) {
+        if (e.key === ' ' || e.key === 'Space') { e.preventDefault();
+            onActionStart(); }
+        if (e.key === 'x' || e.key === 'X' || e.key === 'Escape') { onActionQuit(); }
+        return;
+    }
+
+    if (appState === AppState.PLAYING) {
+        if (e.key === 'x' || e.key === 'X' || e.key === 'Escape') { onActionQuit(); return; }
+        if (e.key === ' ' || e.key === 'Space') {
+            if (netRole === NetRole.HOST && (gameState.phase === Phase.ROUND_OVER || gameState.phase === Phase.BETTING)) {
+                e.preventDefault();
+                onActionStart();
+                return;
+            }
+        }
+        // Only accept action keys when it's my turn
+        if (gameState.currentPlayer === localPlayerId && gameState.phase === Phase.PLAYING) {
+            const p = gameState.players[localPlayerId];
+            if (!p || p.standing || p.busted) return;
+            switch (e.key) {
+                case 'h':
+                case 'H':
+                    handleLocalAction(Action.HIT);
+                    break;
+                case 's':
+                case 'S':
+                    handleLocalAction(Action.STAND);
+                    break;
+                case 'd':
+                case 'D':
+                    if (p.hands[0].length <= 2 && p.chips >= p.bet)
+                        handleLocalAction(Action.DOUBLE_DOWN);
+                    break;
+            }
+        }
+    }
+});
+
+// ============================================================
+// INPUT: LOCAL ACTION HANDLER
+// ============================================================
+function handleLocalAction(action) {
+    if (appState !== AppState.PLAYING) return;
+    if (gameState.currentPlayer !== localPlayerId) return;
+    if (gameState.phase !== Phase.PLAYING) return;
+
+    if (netRole === NetRole.HOST) {
+        handleAction(localPlayerId, action);
+    } else if (netRole === NetRole.CLIENT && clientConnection && clientConnection.open) {
+        const buf = new ArrayBuffer(2);
+        const v = new Uint8Array(buf);
+        v[0] = PacketType.PLAYER_ACTION;
+        v[1] = action;
+        clientConnection.send(buf);
+    }
+}
+
+// ============================================================
+// TOUCH: Action Buttons
+// ============================================================
+document.getElementById('btn-hit').addEventListener('click', () => handleLocalAction(Action.HIT));
+document.getElementById('btn-hit').addEventListener('touchend', (e) => { e.preventDefault();
+    handleLocalAction(Action.HIT); });
+document.getElementById('btn-stand').addEventListener('click', () => handleLocalAction(Action.STAND));
+document.getElementById('btn-stand').addEventListener('touchend', (e) => { e.preventDefault();
+    handleLocalAction(Action.STAND); });
+document.getElementById('btn-double').addEventListener('click', () => handleLocalAction(Action.DOUBLE_DOWN));
+document.getElementById('btn-double').addEventListener('touchend', (e) => { e.preventDefault();
+    handleLocalAction(Action.DOUBLE_DOWN); });
+
+// ============================================================
+// ACTION BUTTON WIRING
+// ============================================================
+document.getElementById('btn-start-game').addEventListener('click', onActionStart);
+document.getElementById('btn-start-game').addEventListener('touchend', (e) => { e.preventDefault();
+    onActionStart(); });
+document.getElementById('btn-quit-game').addEventListener('click', onActionQuit);
+document.getElementById('btn-quit-game').addEventListener('touchend', (e) => { e.preventDefault();
+    onActionQuit(); });
+
+document.getElementById('btn-lobby-start').addEventListener('click', onActionStart);
+document.getElementById('btn-lobby-start').addEventListener('touchend', (e) => { e.preventDefault();
+    onActionStart(); });
+document.getElementById('btn-lobby-cancel').addEventListener('click', onActionQuit);
+document.getElementById('btn-lobby-cancel').addEventListener('touchend', (e) => { e.preventDefault();
+    onActionQuit(); });
+
+// ============================================================
+// RESIZE HANDLER
+// ============================================================
+window.addEventListener('resize', () => {
+    resizeGame();
+    renderDispatch();
+});
+
+// ============================================================
+// BROWSER CLOSE DETECTION
+// ============================================================
+window.addEventListener('beforeunload', () => {
+    if (netRole === NetRole.CLIENT && clientConnection && clientConnection.open) {
+        try {
+            const buf = new ArrayBuffer(1);
+            const v = new Uint8Array(buf);
+            v[0] = PacketType.PLAYER_LEAVE;
+            clientConnection.send(buf);
+        } catch (e) { }
+    } else if (netRole === NetRole.HOST) {
+        const buf = new ArrayBuffer(1);
+        const v = new Uint8Array(buf);
+        v[0] = PacketType.PLAYER_LEAVE;
+        for (let i = 1; i < MAX_PLAYERS; i++) {
+            if (hostConnections[i] && hostConnections[i].open) {
+                try { hostConnections[i].send(buf); } catch (e) { }
+            }
+        }
+    }
+});
+
+// ============================================================
+// GAME LOOP
+// ============================================================
+let lastFrameTime = performance.now();
+
+function gameLoop(timestamp) {
+    const dt = timestamp - lastFrameTime;
+    if (dt >= (1000 / 60)) {
+        renderDispatch();
+        lastFrameTime = timestamp;
+    }
+    requestAnimationFrame(gameLoop);
+}
+
+// ============================================================
+// INIT
+// ============================================================
+function init() {
+    for (let i = 0; i < MAX_PLAYERS; i++) {
+        gameState.players[i] = {
+            active: false,
+            hands: [[]],
+            bet: DEFAULT_BET,
+            chips: DEFAULT_CHIPS,
+            standing: false,
+            busted: false,
+            result: 'pending'
+        };
+    }
+    gameState.dealer = { hand: [], hidden: true };
+    gameState.phase = Phase.BETTING;
+    gameState.currentPlayer = -1;
+    gameState.round = 0;
+    gameState.turnOrder = [];
+    gameState.message = 'Press DEAL to start a round!';
+    appState = AppState.MENU;
+    netRole = NetRole.NONE;
+    localPlayerId = -1;
+    activePlayerCount = 0;
+    playerConnectionType = new Array(MAX_PLAYERS).fill('');
+    lastAckTick = new Array(MAX_PLAYERS).fill(-1);
+    tickCounter = 0;
+    lastGameStateTime = Date.now();
+    playerDisconnected = new Array(MAX_PLAYERS).fill(false);
+    hostConnections = new Array(MAX_PLAYERS).fill(null);
+    deck = [];
+    resizeGame();
+    showMenu();
+    requestAnimationFrame(gameLoop);
+}
+init();
+checkAutoJoin();
+
+// Lobby UI polling
+setInterval(() => {
+    if (appState === AppState.LOBBY) {
+        const startHint = document.getElementById('start-hint');
+        if (netRole === NetRole.HOST && activePlayerCount >= 1) {
+            startHint.classList.toggle('hidden', document.getElementById('host-invite-row').classList.contains('hidden'));
+        } else { startHint.classList.add('hidden'); }
+    }
+    // Host heartbeat (every ~5s = 10 intervals)
+    if (appState !== AppState.MENU && netRole === NetRole.HOST) {
+        tickCounter++;
+        if (tickCounter % 10 === 0) {
+            for (let i = 1; i < MAX_PLAYERS; i++) {
+                if (hostConnections[i] && gameState.players[i].active)
+                    sendPkt(hostConnections[i], PacketType.HEARTBEAT, null);
+            }
+        }
+        if (tickCounter % 2 === 0) {
+            for (let i = 1; i < MAX_PLAYERS; i++) {
+                if (hostConnections[i] && lastAckTick[i] >= 0 && tickCounter - lastAckTick[i] > 20)
+                    handlePlayerDisconnect(i);
+            }
+        }
+    }
+    // Client: detect host disconnect (30s without any packet)
+    if (appState !== AppState.MENU && netRole === NetRole.CLIENT) {
+        if (Date.now() - lastGameStateTime > 30000) {
+            setStatusMsg('Host disconnected', 300);
+            cleanupClient();
+            appState = AppState.MENU;
+            showMenu();
+            updateControllerUI();
+        }
+    }
+    updateControllerUI();
+}, 500);
+
+console.log('Blackjack 4P Multiplayer loaded!');
+</script>
+</body>
+</html>
