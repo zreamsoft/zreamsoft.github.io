@@ -250,7 +250,6 @@ body {
                 </div>
             </div>
             <div id="lobby-wait-msg" style="color:#8888AA;font-size:clamp(11px,2.2vw,13px);margin:4px 0;"></div>
-            <div id="ice-status" style="color:#8888AA;font-size:clamp(12px,2.5vw,14px);text-align:center;min-height:20px;margin:4px 0;padding:4px 8px;border-radius:4px;"></div>
             <div id="start-hint" class="hidden" style="color:#00FF88;font-size:clamp(12px,2.5vw,14px);margin:4px 0;">Tap START or press SPACE to begin!</div>
             <div class="hint-text">QUIT: Back to menu</div>
         </div>
@@ -373,7 +372,7 @@ const CHAR_W=5,CHAR_H=7;
 const Direction={STOP:0,UP:1,DOWN:2,LEFT:3,RIGHT:4};
 const AppState={MENU:0,LOBBY:1,PLAYING:2};
 const NetRole={NONE:0,HOST:1,CLIENT:2};
-const PacketType={JOIN_ACCEPT:0,PLAYER_INPUT:1,GAME_STATE:2};
+const PacketType={JOIN_ACCEPT:0,PLAYER_INPUT:1,GAME_STATE:2,LOBBY_STATE:3};
 
 // ============================================================
 // CANVAS SETUP
@@ -414,6 +413,7 @@ let appState=AppState.MENU;
 let netRole=NetRole.NONE;
 let localPlayerId=-1;
 let activePlayerCount=0;
+let connectionEverEstablished=false;
 
 // ============================================================
 // WEBRTC STATE
@@ -609,6 +609,7 @@ function setupHostDataChannel(dc){
         v[0]=playerId;
         sendPkt(dc,PacketType.JOIN_ACCEPT,buf);
         updateLobbyUI();
+        broadcastLobbyState();
         setConnectionStatus('Player '+(playerId+1)+' connected!');
         resetInviteUI();
     };
@@ -644,9 +645,23 @@ function setupHostDataChannel(dc){
             gameState.players[pid].body=[];
             activePlayerCount--;
             updateLobbyUI();
+            broadcastLobbyState();
         }
     };
     if(dc.readyState==='open')setTimeout(()=>dc.onopen(),0);
+}
+function broadcastLobbyState(){
+    const buf=new ArrayBuffer(1+MAX_PLAYERS);
+    const v=new Uint8Array(buf);
+    v[0]=PacketType.LOBBY_STATE;
+    for(let i=0;i<MAX_PLAYERS;i++){
+        v[1+i]=gameState.players[i].active?1:0;
+    }
+    for(let i=0;i<clientChannels.length;i++){
+        if(clientChannels[i]&&clientChannels[i].readyState==='open'){
+            clientChannels[i].send(buf);
+        }
+    }
 }
 function onClientMessage(e){
     const v=new Uint8Array(e.data);
@@ -654,6 +669,8 @@ function onClientMessage(e){
     const type=v[0];const data=v.slice(1);
     if(type===PacketType.JOIN_ACCEPT&&data.length>=1){
         localPlayerId=data[0];
+        gameState.players[localPlayerId].active=true;
+        activePlayerCount++;
         setStatusMsg('You are P'+(localPlayerId+1),300);
         updateLobbyUI();
     }else if(type===PacketType.GAME_STATE&&data.length>=4){
@@ -665,6 +682,15 @@ function onClientMessage(e){
             document.getElementById('gameover-overlay').classList.add('hidden');
             updateControllerUI();
         }
+    }else if(type===PacketType.LOBBY_STATE&&data.length>=MAX_PLAYERS){
+        let count=0;
+        for(let i=0;i<MAX_PLAYERS;i++){
+            const active=data[i]!==0;
+            gameState.players[i].active=active;
+            if(active)count++;
+        }
+        activePlayerCount=count;
+        updateLobbyUI();
     }
 }
 async function hostCreateOffer(){
@@ -702,7 +728,7 @@ async function hostCreateOffer(){
             }
         };
         pc.createOffer().then(offer=>pc.setLocalDescription(offer)).catch(err=>reject(err));
-        setTimeout(()=>{if(!gatheringDone){gatheringDone=true;console.warn('HOST ICE gathering timed out after 15s');resolve(pc.localDescription.sdp);}},15000);
+        setTimeout(()=>{if(!gatheringDone){gatheringDone=true;console.warn('HOST ICE gathering timed out after 15s');setIceStatus('\u{2705} Candidates gathered (timeout), code ready','#FFBB00');resolve(pc.localDescription.sdp);}},15000);
     });
     return sdp;
 }
@@ -710,7 +736,14 @@ async function clientJoin(offerSdp){
     const pc=new RTCPeerConnection(getIceConfig());
     pc.ondatachannel=(event)=>{
         clientDC=event.channel;
-        clientDC.onopen=()=>{netRole=NetRole.CLIENT;setConnectionStatus('Connected to host!');updateLobbyUI();updateControllerUI();};
+        clientDC.onopen=()=>{
+            netRole=NetRole.CLIENT;
+            setConnectionStatus('Connected to host!');
+            document.getElementById('sdp-exchange').classList.add('hidden');
+            document.getElementById('code-ready-banner').classList.add('hidden');
+            updateLobbyUI();
+            updateControllerUI();
+        };
         clientDC.onmessage=onClientMessage;
         clientDC.onclose=()=>{setStatusMsg('Disconnected from host',300);cleanupClient();appState=AppState.MENU;showMenu();updateControllerUI();};
         if(clientDC.readyState==='open'){netRole=NetRole.CLIENT;setConnectionStatus('Connected to host!');updateLobbyUI();updateControllerUI();}
@@ -719,9 +752,9 @@ async function clientJoin(offerSdp){
         console.log('CLIENT ICE state:',pc.iceConnectionState);
         switch(pc.iceConnectionState){
             case 'new':case 'checking':setIceStatus('\u{1F7E1} Checking connection...','#FFBB00');break;
-            case 'connected':setIceStatus('\u{1F7E2} ICE Connected!','#00FF88');setTimeout(()=>detectTurnRelay(pc),500);break;
+            case 'connected':connectionEverEstablished=true;setIceStatus('\u{1F7E2} ICE Connected!','#00FF88');setTimeout(()=>detectTurnRelay(pc),500);break;
             case 'failed':setIceStatus('\u{1F534} ICE Failed - may need TURN server','#FF4444');setConnectionStatus('ICE connection failed.');break;
-            case 'disconnected':setIceStatus('\u{1F7E0} Disconnected - trying to reconnect...','#FFBB00');break;
+            case 'disconnected':setIceStatus(connectionEverEstablished?'\u{1F7E0} Disconnected - trying to reconnect...':'\u{1F7E0} Waiting for host to accept your response...','#FFBB00');break;
             case 'closed':setIceStatus('\u{26AA} Connection closed','#8888AA');break;
         }
     };
@@ -745,7 +778,7 @@ async function clientJoin(offerSdp){
           .then(()=>pc.createAnswer())
           .then(answer=>pc.setLocalDescription(answer))
           .catch(err=>reject(err));
-        setTimeout(()=>{if(!gatheringDone){gatheringDone=true;console.warn('CLIENT ICE gathering timed out after 15s');resolve(pc.localDescription.sdp);}},15000);
+        setTimeout(()=>{if(!gatheringDone){gatheringDone=true;console.warn('CLIENT ICE gathering timed out after 15s');setIceStatus('\u{2705} Candidates gathered (timeout), code ready','#FFBB00');resolve(pc.localDescription.sdp);}},15000);
     });
     clientAnswerSDP=sdp;
     return {pc,sdp};
@@ -756,11 +789,12 @@ function cleanupHost(){
     if(hostPC){try{hostPC.close();}catch(e){}}hostPC=null;hostDC=null;netRole=NetRole.NONE;
     activePlayerCount=0;localPlayerId=-1;
     clearIceStatus();
+    resetInviteUI();
 }
 function cleanupClient(){
     if(clientDC){try{clientDC.close();}catch(e){}clientDC=null;}
     if(clientPC){try{clientPC.close();}catch(e){}clientPC=null;}
-    netRole=NetRole.NONE;localPlayerId=-1;
+    netRole=NetRole.NONE;localPlayerId=-1;connectionEverEstablished=false;
     clearIceStatus();
 }
 function cleanupAll(){cleanupHost();cleanupClient();}
@@ -797,16 +831,12 @@ function setConnectionStatus(msg){
     if(el2)el2.textContent=msg;
 }
 function setIceStatus(msg,color){
-    const elLobby=document.getElementById('ice-status');
-    const elGlobal=document.getElementById('conn-indicator');
-    if(elLobby){elLobby.textContent=msg;elLobby.style.color=color||'#8888AA';elLobby.style.background=color?(color==='#FF4444'?'rgba(255,68,68,0.1)':color==='#00FF88'?'rgba(0,255,136,0.08)':color==='#FFBB00'?'rgba(255,187,0,0.08)':'transparent'):'transparent';}
-    if(elGlobal){elGlobal.textContent=msg;elGlobal.style.color=color||'#8888AA';elGlobal.style.background='transparent';}
+    const el=document.getElementById('conn-indicator');
+    if(el){el.textContent=msg;el.style.color=color||'#8888AA';el.style.background='transparent';}
 }
 function clearIceStatus(){
-    const elLobby=document.getElementById('ice-status');
-    const elGlobal=document.getElementById('conn-indicator');
-    if(elLobby){elLobby.textContent='';elLobby.style.color='';elLobby.style.background='';}
-    if(elGlobal){elGlobal.textContent='';elGlobal.style.color='';}
+    const el=document.getElementById('conn-indicator');
+    if(el){el.textContent='';el.style.color='';}
 }
 async function detectTurnRelay(pc){
     if(!pc||pc.iceConnectionState!=='connected')return;
