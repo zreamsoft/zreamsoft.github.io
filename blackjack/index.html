@@ -58,6 +58,17 @@ body {
 .menu-btn:hover { background:#CC0000; color:#FFFFFF; }
 .menu-btn:active { transform:scale(0.97); background:#CC0000; color:#FFFFFF; }
 
+.relay-toggle {
+    display:flex; align-items:center; gap:8px;
+    color:#8888AA; font-size:clamp(10px,2.2vw,13px);
+    cursor:pointer; margin:6px 0; padding:4px 8px;
+    border:1px solid #333; border-radius:4px;
+    background:#1A1A2E; transition:all 0.15s;
+    -webkit-user-select:none; user-select:none;
+}
+.relay-toggle:hover { border-color:#CC0000; color:#CCCCCC; }
+.relay-toggle input { accent-color:#CC0000; cursor:pointer; }
+
 .title-text {
     color:#FFD700; font-size:clamp(24px,8vw,42px); font-weight:bold;
     letter-spacing:clamp(6px,2vw,12px); margin-bottom:0;
@@ -250,6 +261,10 @@ body {
             <div class="subtitle">4 PLAYER MULTIPLAYER</div>
             <button class="menu-btn" onclick="createGame()">1 - CREATE GAME (HOST)</button>
             <button class="menu-btn" onclick="showJoinUI()">2 - JOIN GAME</button>
+            <label class="relay-toggle">
+                <input type="checkbox" id="cb-force-relay">
+                Host with Server (TURN relay only)
+            </label>
             <div id="menu-status" class="status-msg"></div>
             <div class="hint-text">H=Hit  S=Stand  D=Double  Space=Deal  X=Quit</div>
             <div class="conn-msg"></div>
@@ -425,9 +440,12 @@ let _lastEffectRound = -1;
 const ICE_CONFIG = { 'iceServers': [
     { 'urls': 'stun:stun.l.google.com:19302' },
     { 'urls': 'stun:stun1.l.google.com:19302' },
+    { 'urls': 'stun:stun.relay.metered.ca:80' },
     { 'urls': 'turn:global.relay.metered.ca:80', 'username': 'b91725d7ea7bd065ec4541ce', 'credential': 'mtiQ613jx/8DXIW0' },
-    { 'urls': 'turn:global.relay.metered.ca:443', 'username': 'b91725d7ea7bd065ec4541ce', 'credential': 'mtiQ613jx/8DXIW0' }
-] };
+    { 'urls': 'turn:global.relay.metered.ca:80?transport=tcp', 'username': 'b91725d7ea7bd065ec4541ce', 'credential': 'mtiQ613jx/8DXIW0' },
+    { 'urls': 'turn:global.relay.metered.ca:443', 'username': 'b91725d7ea7bd065ec4541ce', 'credential': 'mtiQ613jx/8DXIW0' },
+    { 'urls': 'turns:global.relay.metered.ca:443?transport=tcp', 'username': 'b91725d7ea7bd065ec4541ce', 'credential': 'mtiQ613jx/8DXIW0' }
+], 'sdpSemantics': 'unified-plan' };
 const SIGNALING_CONFIG = { host: '0.peerjs.com', port: 443, path: '/' };
 let hostPeer = null, clientPeer = null;
 let hostConnections = new Array(MAX_PLAYERS).fill(null);
@@ -439,6 +457,12 @@ let tickCounter = 0;
 let lastGameStateTime = Date.now();
 let playerDisconnected = new Array(MAX_PLAYERS).fill(false);
 let hostReconnecting = false;
+let forceRelay = false;
+
+function getIceConfig() {
+    if (!forceRelay) return ICE_CONFIG;
+    return { ...ICE_CONFIG, iceTransportPolicy: 'relay' };
+}
 
 // ============================================================
 // FRIENDLY PEER ID GENERATION
@@ -953,6 +977,64 @@ function sendGameState() {
     }
 }
 
+function checkIceCandidateType(pc, slot) {
+    pc.getStats().then(stats => {
+        stats.forEach(stat => {
+            if (stat.type === 'candidate-pair' && (stat.state === 'succeeded' || stat.selected)) {
+                const remote = stats.get(stat.remoteCandidateId);
+                const local = stats.get(stat.localCandidateId);
+                const isRelay = remote?.candidateType === 'relay' || local?.candidateType === 'relay';
+                playerConnectionType[slot] = isRelay ? 'relay' : 'direct';
+                updateLobbyUI();
+                if (netRole === NetRole.HOST) broadcastLobbyState();
+            }
+        });
+    }).catch(() => {});
+}
+
+function monitorIceConnection(conn, slot) {
+    setTimeout(() => {
+        const pc = conn.peerConnection;
+        if (!pc) return;
+        pc.addEventListener('connectionstatechange', () => {
+            const state = pc.connectionState;
+            if (state === 'connected') {
+                setIceStatus('Connection established', '#44CC44');
+                checkIceCandidateType(pc, slot);
+            } else if (state === 'failed') {
+                setIceStatus('Connection failed — check firewall/NAT', '#FF4444');
+            } else if (state === 'connecting') {
+                setIceStatus('Establishing connection...', '#8888AA');
+            }
+        });
+        // Also check current state — connection may already be established
+        if (pc.connectionState === 'connected') {
+            setIceStatus('Connection established', '#44CC44');
+            checkIceCandidateType(pc, slot);
+        }
+    }, 0);
+}
+
+function monitorClientIceConnection(conn) {
+    setTimeout(() => {
+        const pc = conn.peerConnection;
+        if (!pc) return;
+        pc.addEventListener('connectionstatechange', () => {
+            const state = pc.connectionState;
+            if (state === 'connected') {
+                setIceStatus('Connected', '#44CC44');
+            } else if (state === 'failed') {
+                setIceStatus('Connection failed — check firewall/NAT', '#FF4444');
+            } else if (state === 'connecting') {
+                setIceStatus('Establishing connection...', '#8888AA');
+            }
+        });
+        if (pc.connectionState === 'connected') {
+            setIceStatus('Connected', '#44CC44');
+        }
+    }, 0);
+}
+
 function setupHostDataConnection(conn, slot) {
     const playerId = slot;
     let joined = false;
@@ -973,6 +1055,7 @@ function setupHostDataConnection(conn, slot) {
             v2[0] = playerId;
             sendPkt(conn, PacketType.JOIN_ACCEPT, buf);
             playerConnectionType[playerId] = 'direct';
+            monitorIceConnection(conn, playerId);
             updateLobbyUI();
             broadcastLobbyState();
             setConnectionStatus('Player ' + (playerId + 1) + ' connected!');
@@ -1100,6 +1183,9 @@ function onClientMessage(raw) {
         }
         activePlayerCount = count;
         updateLobbyUI();
+        if (localPlayerId >= 0 && playerConnectionType[localPlayerId]) {
+            setIceStatus('Connected via ' + playerConnectionType[localPlayerId].charAt(0).toUpperCase() + playerConnectionType[localPlayerId].slice(1), '#44CC44');
+        }
 
     } else if (type === PacketType.HEARTBEAT) {
         sendPkt(clientConnection, PacketType.HEARTBEAT_ACK, null);
@@ -1290,7 +1376,7 @@ function createPeerWithFriendlyId() {
         function tryCreate() {
             if (timedOut) return;
             const id = generateFriendlyId();
-            const p = new Peer(id, { ...SIGNALING_CONFIG, config: ICE_CONFIG });
+            const p = new Peer(id, { ...SIGNALING_CONFIG, config: getIceConfig() });
             p.on('open', () => {
                 if (timedOut) { p.destroy(); return; }
                 clearTimeout(timer);
@@ -1334,6 +1420,7 @@ function initBlackjackGame() {
 // ===== CREATE GAME (HOST) =====
 async function createGame() {
     cleanupAll();
+    forceRelay = document.getElementById('cb-force-relay').checked;
     netRole = NetRole.HOST;
 
     // Initialize players
@@ -1421,7 +1508,7 @@ async function createGame() {
             timer = setTimeout(retry, 1000);
         });
         setConnectionStatus('Your game ID: ' + result.id);
-        const link = window.location.origin + window.location.pathname + '?join=' + result.id;
+        const link = window.location.origin + window.location.pathname + '?join=' + result.id + (forceRelay ? '&relay=1' : '');
         document.getElementById('invite-link-input').value = link;
         document.getElementById('host-invite-row').classList.remove('hidden');
         const qrContainer = document.getElementById('qr-container');
@@ -1488,6 +1575,7 @@ async function manualJoin() {
         const url = new URL(input);
         const j = url.searchParams.get('join');
         if (j) peerId = j;
+        if (url.searchParams.get('relay') === '1') forceRelay = true;
     } catch (e) { /* not a URL */ }
     document.getElementById('join-status').textContent = 'Connecting...';
     await connectToHost(peerId, true);
@@ -1518,7 +1606,7 @@ async function connectToHost(peerId, autoJoin) {
             showRetryError('Connection timed out. Could not reach host.');
         }, CONNECT_TIMEOUT_MS);
 
-        clientPeer = new Peer({ ...SIGNALING_CONFIG, config: ICE_CONFIG });
+        clientPeer = new Peer({ ...SIGNALING_CONFIG, config: getIceConfig() });
         clientPeer.on('open', () => {
             document.getElementById('join-status').textContent = 'Connecting to host...';
             const conn = clientPeer.connect(peerId);
@@ -1527,6 +1615,7 @@ async function connectToHost(peerId, autoJoin) {
                 if (resolved) return;
                 resolved = true;
                 clearTimeout(timer);
+                monitorClientIceConnection(conn);
                 if (autoJoin) {
                     doJoin();
                 } else {
@@ -1618,6 +1707,7 @@ function checkAutoJoin() {
     const params = new URLSearchParams(window.location.search);
     const joinId = params.get('join');
     if (joinId) {
+        if (params.get('relay') === '1') forceRelay = true;
         setTimeout(() => {
             showJoinUI();
             document.getElementById('join-input').value = joinId;
