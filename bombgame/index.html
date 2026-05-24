@@ -1,0 +1,2375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>BombGame - 4P Multiplayer</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+html, body {
+    width:100%; height:100%;
+    overflow:hidden;
+    touch-action: manipulation;
+    -webkit-user-select:none; user-select:none;
+    -webkit-tap-highlight-color:transparent;
+    -webkit-touch-callout:none;
+}
+body {
+    background:#0D0D1A;
+    font-family:monospace;
+    display:flex; justify-content:center; align-items:center;
+}
+#app-container {
+    display:flex; flex-direction:column;
+    width:100%; max-width:650px;
+    height:100vh; height:100dvh;
+}
+#game-container {
+    position:relative; flex:0 0 auto;
+    display:flex; justify-content:center; align-items:center;
+    background:#0D0D1A;
+}
+#pixi-container { display:block; border-radius:4px; overflow:hidden; }
+#pixi-container canvas { display:block; }
+
+.overlay, .overlay-fs {
+    position:absolute; top:0; left:0;
+    width:100%; height:100%;
+    display:flex; flex-direction:column;
+    align-items:center; justify-content:center;
+    pointer-events:none; z-index:10;
+}
+.overlay-fs {
+    position:fixed; left:50%;
+    transform:translateX(-50%);
+    max-width:650px; height:100dvh;
+}
+.overlay > *, .overlay-fs > * { pointer-events:auto; }
+.hidden { display:none !important; }
+.hidden-ctrl { display:none !important; }
+.conn-msg { min-height:18px; font-size:clamp(10px,2vw,12px); text-align:center; color:#8888AA; padding:2px 8px; }
+
+.menu-btn {
+    background:#1A1A2E; color:#CCCCCC; border:1px solid #FF6600;
+    padding:10px 16px; font-family:monospace; font-size:clamp(12px,3vw,16px);
+    cursor:pointer; margin:4px; transition:all 0.15s;
+    border-radius:6px; min-width:200px; max-width:88vw;
+    -webkit-tap-highlight-color:transparent;
+}
+.menu-btn:hover { background:#FF6600; color:#FFFFFF; }
+.menu-btn:active { transform:scale(0.97); background:#FF6600; color:#FFFFFF; }
+
+.relay-toggle {
+    display:flex; align-items:center; gap:8px;
+    color:#8888AA; font-size:clamp(10px,2.2vw,13px);
+    cursor:pointer; margin:6px 0; padding:4px 8px;
+    border:1px solid #333; border-radius:4px;
+    background:#1A1A2E; transition:all 0.15s;
+    -webkit-user-select:none; user-select:none;
+}
+.relay-toggle:hover { border-color:#FF6600; color:#CCCCCC; }
+.relay-toggle input { accent-color:#FF6600; cursor:pointer; }
+
+.title-text {
+    color:#FF6600; font-size:clamp(22px,7vw,38px); font-weight:bold;
+    letter-spacing:clamp(4px,1.5vw,8px); margin-bottom:0;
+    text-shadow:0 0 20px rgba(255,102,0,0.5);
+}
+.subtitle { color:#AAAAAA; font-size:clamp(10px,2.5vw,14px); margin-bottom:20px; text-align:center; padding:0 10px; }
+.title-box { display:inline-flex; flex-direction:column; align-items:center; padding:clamp(14px,3vw,24px) clamp(20px,4vw,36px); border:2px solid #FF6600; border-radius:clamp(10px,2vw,16px); background:rgba(255,102,0,0.04); box-shadow:0 0 30px rgba(255,102,0,0.15), inset 0 0 20px rgba(255,102,0,0.04); margin-bottom:clamp(8px,2vw,14px); }
+.bomb-icon { font-size:clamp(28px,6vw,40px); margin-bottom:4px; }
+.hint-text { color:#8888AA; font-size:clamp(10px,2.2vw,12px); margin-top:10px; text-align:center; padding:0 10px; }
+
+.connect-area {
+    background:#1A1A2E; border:1px solid #44BBFF; border-radius:4px;
+    padding:12px; width:min(500px,92vw); margin:6px 0;
+}
+.connect-area label { display:block; color:#CCCCCC; font-size:clamp(11px,2.2vw,13px); margin-bottom:4px; }
+.connect-area textarea {
+    width:100%; height:80px; background:#0D0D1A; color:#FFD700;
+    border:1px solid #333; font-family:monospace; font-size:clamp(10px,2vw,12px);
+    padding:6px; resize:vertical; outline:none; border-radius:2px;
+}
+.connect-area textarea:focus { border-color:#FFD700; }
+.connect-area .btn-row { display:flex; gap:8px; margin-top:8px; justify-content:center; flex-wrap:wrap; }
+.connect-area .a-btn {
+    background:#16213E; color:#CCCCCC; border:1px solid #44BBFF;
+    padding:8px 14px; font-family:monospace; font-size:clamp(11px,2.2vw,13px);
+    cursor:pointer; border-radius:4px; transition:all 0.15s;
+    -webkit-tap-highlight-color:transparent;
+}
+.connect-area .a-btn:hover { background:#44BBFF; color:#0D0D1A; }
+.connect-area .a-btn:active { background:#44BBFF; color:#0D0D1A; }
+.connect-area .status-text {
+    color:#8888AA; font-size:clamp(10px,2vw,12px); margin-top:6px; text-align:center; min-height:16px;
+}
+.connected-dot { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:6px; vertical-align:middle; }
+.player-list { margin:4px 0; color:#CCCCCC; font-size:clamp(11px,2.2vw,13px); }
+.player-list .p-entry { margin:2px 0; }
+.lobby-info { color:#CCCCCC; font-size:clamp(12px,2.5vw,14px); text-align:center; margin:3px 0; }
+.lobby-info .highlight { color:#FFD700; }
+.status-msg {
+    color:#FF4444; font-size:clamp(11px,2.2vw,13px); text-align:center; margin-top:4px; min-height:18px;
+}
+.code-ready-msg {
+    color:#FFBB00; font-size:clamp(16px,4vw,24px); font-weight:bold; text-align:center;
+    margin-bottom:8px; letter-spacing:2px;
+    text-shadow:0 0 15px rgba(255,187,0,0.5);
+    animation:codePulse 1.5s ease-in-out infinite;
+}
+@keyframes codePulse { 0%,100% { opacity:1; } 50% { opacity:0.6; } }
+
+/* SCORE BAR */
+#scorebar {
+    flex:0 0 auto;
+    background:#1A1A2E;
+    border-bottom:1px solid #FF6600;
+    padding:4px 8px;
+    display:flex; flex-direction:column;
+    justify-content:center;
+}
+#score-player-list {
+    display:flex; flex-wrap:wrap; justify-content:space-around; align-items:center;
+    gap:4px;
+}
+.score-player-entry {
+    display:flex; flex-direction:column; align-items:center;
+    background:rgba(13,13,26,0.5); border-radius:4px;
+    padding:3px 8px; min-width:64px;
+}
+.score-player-name {
+    font-size:clamp(14px,2.2vw,16px); font-weight:bold;
+    margin-bottom:1px;
+}
+.score-player-status {
+    font-size:clamp(11px,1.5vw,13px);
+    font-weight:bold;
+}
+#game-hint {
+    flex:0 0 auto;
+    text-align:center;
+    padding:6px 8px;
+    font-size:clamp(11px,2.5vw,14px);
+    color:#FFD700;
+    background:#0A0A16;
+    border-top:1px solid #16213E;
+    border-bottom:1px solid #16213E;
+    min-height:26px;
+    font-weight:bold;
+}
+
+/* CONTROLLER */
+#controller-area {
+    flex:0 0 auto;
+    display:flex; flex-direction:row;
+    justify-content:space-evenly; align-items:center;
+    background:#0A0A16;
+    border-top:2px solid #FF6600;
+    padding:10px 8px;
+    min-height:170px;
+}
+#dpad {
+    display:grid;
+    grid-template-columns: 48px 48px 48px;
+    grid-template-rows: 48px 48px 48px;
+    gap:3px;
+    justify-content:center;
+}
+.dpad-btn {
+    background:#1A1A2E; border:2px solid #666;
+    border-radius:10px; color:#AAA;
+    font-size:20px; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    -webkit-tap-highlight-color:transparent;
+    touch-action:manipulation;
+    transition:all 0.1s;
+    -webkit-user-select:none; user-select:none;
+}
+.dpad-btn:active, .dpad-btn.pressed {
+    background:#FF6600; color:#FFF; border-color:#FF6600;
+    transform:scale(0.92);
+}
+.dpad-empty { background:transparent; border:none; }
+#bomb-btn {
+    background:#CC3300; border:3px solid #FF4400; border-radius:50%;
+    color:#FFF; font-family:monospace;
+    font-size:clamp(13px,3vw,18px); font-weight:bold;
+    width:80px; height:80px; min-width:70px; min-height:70px;
+    cursor:pointer;
+    display:flex; flex-direction:column;
+    align-items:center; justify-content:center;
+    -webkit-tap-highlight-color:transparent;
+    touch-action:manipulation;
+    transition:all 0.12s;
+    -webkit-user-select:none; user-select:none;
+    line-height:1.1;
+}
+#bomb-btn:active, #bomb-btn.pressed {
+    background:#FF4400; transform:scale(0.92);
+}
+#bomb-btn:disabled {
+    opacity:0.35; border-color:#666; color:#666;
+    transform:none; cursor:default;
+}
+.action-btn {
+    background:#1A1A2E; border:1px solid #44BBFF; color:#CCCCCC;
+    padding:10px 16px; font-family:monospace; font-size:clamp(12px,3vw,14px);
+    border-radius:8px; cursor:pointer;
+    -webkit-tap-highlight-color:transparent;
+    touch-action:manipulation; min-width:70px;
+    transition:all 0.12s;
+    -webkit-user-select:none; user-select:none;
+}
+.action-btn:active { background:#44BBFF; color:#0D0D1A; transform:scale(0.94); }
+.action-btn:disabled {
+    opacity:0.35; border-color:#666; color:#666;
+    transform:none; cursor:default;
+}
+.hidden-btn { display:none !important; }
+</style>
+</head>
+<body>
+<div id="app-container">
+
+    <!-- SCORE BAR -->
+    <div id="scorebar" class="hidden-ctrl">
+        <div id="score-player-list"></div>
+    </div>
+
+      <div id="game-container">
+        <div id="pixi-container"></div>
+
+        <!-- MENU OVERLAY -->
+        <div id="menu-overlay" class="overlay-fs">
+            <div class="title-box">
+                <div class="bomb-icon">&#128163;</div>
+                <div class="title-text">BOMBGAME</div>
+            </div>
+            <div class="subtitle">4 PLAYER MULTIPLAYER</div>
+            <button class="menu-btn" onclick="createGame()">1 - CREATE GAME (HOST)</button>
+            <button class="menu-btn" onclick="showJoinUI()">2 - JOIN GAME</button>
+            <label class="relay-toggle">
+                <input type="checkbox" id="cb-force-relay">
+                Host with Server (TURN relay only)
+            </label>
+            <div id="menu-status" class="status-msg"></div>
+            <div class="hint-text">Arrow Keys/WASD = Move &nbsp; Space = Bomb &nbsp; X = Quit</div>
+            <div class="conn-msg"></div>
+        </div>
+
+        <!-- LOBBY OVERLAY -->
+        <div id="lobby-overlay" class="overlay-fs hidden">
+            <div id="lobby-title" style="color:#FF6600;font-size:clamp(20px,5vw,28px);font-weight:bold;letter-spacing:4px;margin-bottom:4px;">LOBBY</div>
+            <div class="lobby-info">Connected: <span id="player-count" class="highlight">0</span>/4</div>
+            <div id="host-ip-info" style="color:#8888AA;font-size:clamp(10px,2vw,12px);margin-bottom:4px;"></div>
+            <div id="player-list" class="player-list"></div>
+            <div id="connect-panel" style="width:min(500px,92vw);margin:4px 0;">
+                <div id="host-invite-row" class="hidden" style="text-align:center;margin:6px 0;">
+                    <label style="color:#CCCCCC;font-size:clamp(11px,2.2vw,13px);margin-bottom:4px;display:block;">Share this link with friends to invite them:</label>
+                    <div style="display:flex;gap:8px;align-items:center;justify-content:center;flex-wrap:wrap;">
+                        <input id="invite-link-input" type="text" readonly
+                               style="flex:1;min-width:220px;background:#0D0D1A;color:#FFD700;border:1px solid #333;padding:6px 8px;font-family:monospace;font-size:clamp(10px,2vw,12px);border-radius:2px;">
+                        <button class="a-btn" onclick="copyInviteLink()" id="btn-copy-link">Copy Link</button>
+                    </div>
+                    <div id="sdp-status" class="status-text" style="margin-top:4px;"></div>
+                    <div id="qr-container" style="margin-top:8px;display:flex;justify-content:center;"></div>
+                </div>
+                <div id="join-area" class="hidden connect-area" style="margin:0 auto;">
+                    <label id="join-label" style="color:#CCCCCC;font-size:clamp(11px,2.2vw,13px);margin-bottom:4px;">Enter the host's invite link or peer ID:</label>
+                    <textarea id="join-input" placeholder="Paste invite link or peer ID..."></textarea>
+                    <div class="btn-row">
+                        <button class="a-btn" id="btn-join-submit" onclick="manualJoin()">Join</button>
+                        <button class="a-btn" onclick="cancelJoin()">Cancel</button>
+                    </div>
+                    <div id="join-status" class="status-text"></div>
+                </div>
+            </div>
+            <div id="lobby-wait-msg" style="color:#8888AA;font-size:clamp(11px,2.2vw,13px);margin:4px 0;"></div>
+            <div id="start-hint" class="hidden" style="color:#FFD700;font-size:clamp(12px,2.5vw,14px);margin:4px 0;">Press SPACE or tap Start to begin!</div>
+            <div id="lobby-actions" style="margin-top:10px;display:none;gap:10px;flex-wrap:wrap;justify-content:center;">
+                <button class="action-btn" id="btn-lobby-start" style="display:none;">Start</button>
+                <button class="action-btn" id="btn-lobby-cancel">Cancel</button>
+            </div>
+            <div class="hint-text">X: Back to menu</div>
+            <div class="conn-msg"></div>
+        </div>
+
+    </div>
+
+    <!-- GAME HINT -->
+    <div id="game-hint" class="hidden-ctrl"></div>
+
+    <!-- CONTROLLER -->
+    <div id="controller-area" class="hidden-ctrl">
+        <div id="dpad">
+            <div class="dpad-empty"></div>
+            <button class="dpad-btn" id="btn-up">▲</button>
+            <div class="dpad-empty"></div>
+            <button class="dpad-btn" id="btn-left">◀</button>
+            <div class="dpad-empty"></div>
+            <button class="dpad-btn" id="btn-right">▶</button>
+            <div class="dpad-empty"></div>
+            <button class="dpad-btn" id="btn-down">▼</button>
+            <div class="dpad-empty"></div>
+        </div>
+        <button id="bomb-btn">💣<br>BOMB</button>
+    </div>
+    <div id="action-row" class="hidden-ctrl" style="text-align:center;padding:4px;background:#0A0A16;border-top:1px solid #16213E;">
+        <button class="action-btn hidden-btn" id="btn-quit-game">QUIT</button>
+    </div>
+
+</div>
+
+<script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://pixijs.download/v7.3.2/pixi.min.js"></script>
+<script>
+// ============================================================
+// CONSTANTS
+// ============================================================
+const MAX_PLAYERS = 4;
+const GRID_COLS = 13;
+const GRID_ROWS = 11;
+const CELL_SIZE = 48;
+const ARENA_W = GRID_COLS * CELL_SIZE;
+const ARENA_H = GRID_ROWS * CELL_SIZE;
+
+const CELL_EMPTY = 0;
+const CELL_WALL = 1;
+const CELL_SOFT_BLOCK = 2;
+
+const PlayerAction = { MOVE_UP: 1, MOVE_DOWN: 2, MOVE_LEFT: 3, MOVE_RIGHT: 4, PLACE_BOMB: 5 };
+const GamePhase = { WAITING: 0, PLAYING: 1, ROUND_OVER: 2 };
+const AppState = { MENU: 0, LOBBY: 1, PLAYING: 2 };
+const NetRole = { NONE: 0, HOST: 1, CLIENT: 2 };
+const PacketType = { JOIN_ACCEPT: 0, PLAYER_ACTION: 1, GAME_STATE: 2, LOBBY_STATE: 3, JOIN_REQUEST: 4, HEARTBEAT: 5, HEARTBEAT_ACK: 6, PLAYER_LEAVE: 7, PLAYER_DIRECTION: 8 };
+const PowerupType = { BOMB_UP: 0, FIRE_UP: 1, SPEED_UP: 2 };
+
+const PLAYER_COLORS = [0xFFD700, 0x44BBFF, 0xFF6B6B, 0x66DD88];
+const PLAYER_SPAWNS = [{gx:0,gy:0}, {gx:12,gy:0}, {gx:0,gy:10}, {gx:12,gy:10}];
+const BOMB_TIMER_TICKS = 120; // 2 seconds at 60Hz
+const EXPLOSION_DURATION = 30; // 0.5 seconds at 60Hz
+const EXPLOSION_SAFE_FADE = 10; // last 10 ticks (~0.17s) are visually fading and safe
+const POWERUP_CHANCE = 0.5;
+
+// ============================================================
+// PIXI SETUP
+// ============================================================
+let app = null;
+let layers = {};
+
+function initPixi() {
+    if (app) { app.destroy(true, {children:true}); app = null; }
+    app = new PIXI.Application({
+        width: ARENA_W, height: ARENA_H,
+        backgroundColor: 0x1a1a2e,
+        antialias: true,
+        resolution: window.devicePixelRatio || 1,
+        autoDensity: true
+    });
+    const container = document.getElementById('pixi-container');
+    container.innerHTML = '';
+    container.appendChild(app.view);
+
+    layers.floor = new PIXI.Container();
+    layers.walls = new PIXI.Container();
+    layers.softBlocks = new PIXI.Container();
+    layers.powerups = new PIXI.Container();
+    layers.bombs = new PIXI.Container();
+    layers.explosions = new PIXI.Container();
+    layers.players = new PIXI.Container();
+    layers.particles = new PIXI.Container();
+
+    app.stage.addChild(layers.floor);
+    app.stage.addChild(layers.walls);
+    app.stage.addChild(layers.softBlocks);
+    app.stage.addChild(layers.powerups);
+    app.stage.addChild(layers.bombs);
+    app.stage.addChild(layers.explosions);
+    app.stage.addChild(layers.players);
+    app.stage.addChild(layers.particles);
+
+    buildFloorLayer();
+    buildWallLayer();
+}
+
+function handleResize() {
+    if (!app || !app.view) return;
+    const canvas = app.view;
+
+    const maxW = Math.min(window.innerWidth, 650);
+    const maxH = window.innerHeight;
+
+    let usedH = 0;
+    [document.getElementById('scorebar'),
+     document.getElementById('game-hint'),
+     document.getElementById('controller-area'),
+     document.getElementById('action-row')].forEach(el => {
+        if (el && el.offsetHeight && !el.classList.contains('hidden-ctrl')) {
+            usedH += el.offsetHeight;
+        }
+    });
+
+    const availH = maxH - usedH - 4;
+    let scale = Math.min(maxW / ARENA_W, availH / ARENA_H, 1);
+    scale = Math.max(scale, 0.3);
+
+    canvas.style.width = (ARENA_W * scale) + 'px';
+    canvas.style.height = (ARENA_H * scale) + 'px';
+}
+
+function buildFloorLayer() {
+    layers.floor.removeChildren();
+    for (let gy = 0; gy < GRID_ROWS; gy++) {
+        for (let gx = 0; gx < GRID_COLS; gx++) {
+            const g = new PIXI.Graphics();
+            const shade = (gx + gy) % 2 === 0 ? 0x2a2a2a : 0x222222;
+            g.beginFill(shade);
+            g.drawRect(gx * CELL_SIZE, gy * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+            g.endFill();
+            layers.floor.addChild(g);
+        }
+    }
+}
+
+function buildWallLayer() {
+    layers.walls.removeChildren();
+    for (let gy = 0; gy < GRID_ROWS; gy++) {
+        for (let gx = 0; gx < GRID_COLS; gx++) {
+            if (gy % 2 === 1 && gx % 2 === 1) {
+                const g = new PIXI.Graphics();
+                g.beginFill(0x555566);
+                g.drawRect(gx * CELL_SIZE + 2, gy * CELL_SIZE + 2, CELL_SIZE - 4, CELL_SIZE - 4);
+                g.endFill();
+                g.beginFill(0x444455);
+                g.drawRect(gx * CELL_SIZE + 6, gy * CELL_SIZE + 6, CELL_SIZE - 12, CELL_SIZE - 12);
+                g.endFill();
+                layers.walls.addChild(g);
+            }
+        }
+    }
+}
+
+// ============================================================
+// GAME STATE
+// ============================================================
+let gameState = {
+    phase: GamePhase.WAITING,
+    round: 0,
+    winner: null,
+    grid: [],
+    players: [],
+    bombs: [],
+    explosions: [],
+    powerups: [],
+    message: ''
+};
+
+function createPlayerState() {
+    return {
+        active: false,
+        alive: false,
+        x: 0, y: 0,
+        gridX: 0, gridY: 0,
+        maxBombs: 1, bombRange: 1,
+        speed: 0.05,
+        direction: 0,
+        prevDirection: 0,
+        wallSlideAxis: null,
+        wallSlideTarget: 0,
+        onOwnBomb: false,
+        bombsPlaced: 0
+    };
+}
+
+for (let i = 0; i < MAX_PLAYERS; i++) {
+    gameState.players.push(createPlayerState());
+}
+
+let appState = AppState.MENU;
+let netRole = NetRole.NONE;
+let localPlayerId = -1;
+let activePlayerCount = 0;
+let isSoloMode = false;
+let remotePlayerDirections = [0, 0, 0, 0]; // per-player held direction from clients
+let bombRequested = [false, false, false, false]; // per-player bomb placement flag
+
+// Client-side interpolation state (smooth visual movement between 20Hz state updates)
+let interpFromX = [0, 0, 0, 0];
+let interpFromY = [0, 0, 0, 0];
+let interpToX = [0, 0, 0, 0];
+let interpToY = [0, 0, 0, 0];
+let interpStart = -1;
+const INTERP_WINDOW = 50;
+
+// ============================================================
+// ARENA LOGIC
+// ============================================================
+function initArena() {
+    gameState.grid = [];
+    for (let gy = 0; gy < GRID_ROWS; gy++) {
+        gameState.grid[gy] = [];
+        for (let gx = 0; gx < GRID_COLS; gx++) {
+            // Walls at odd,odd (classic BombGame pillars)
+            if (gy % 2 === 1 && gx % 2 === 1) {
+                gameState.grid[gy][gx] = CELL_WALL;
+            } else {
+                gameState.grid[gy][gx] = CELL_EMPTY;
+            }
+        }
+    }
+    // Randomly generate soft blocks across the entire arena (skip walls)
+    for (let gy = 0; gy < GRID_ROWS; gy++) {
+        for (let gx = 0; gx < GRID_COLS; gx++) {
+            if (gameState.grid[gy][gx] === CELL_EMPTY && Math.random() < 0.45) {
+                gameState.grid[gy][gx] = CELL_SOFT_BLOCK;
+            }
+        }
+    }
+    // Ensure corner spawn exits are never blocked
+    gameState.grid[0][1] = CELL_EMPTY; gameState.grid[1][0] = CELL_EMPTY;   // (0,0)
+    gameState.grid[0][11] = CELL_EMPTY; gameState.grid[1][12] = CELL_EMPTY; // (12,0)
+    gameState.grid[10][1] = CELL_EMPTY; gameState.grid[9][0] = CELL_EMPTY;  // (0,10)
+    gameState.grid[10][11] = CELL_EMPTY; gameState.grid[9][12] = CELL_EMPTY; // (12,10)
+    gameState.bombs = [];
+    gameState.explosions = [];
+    gameState.powerups = [];
+}
+
+function clearSpawnArea(gx, gy) {
+    for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+            const cx = gx + dx, cy = gy + dy;
+            if (cx >= 0 && cx < GRID_COLS && cy >= 0 && cy < GRID_ROWS) {
+                if (gameState.grid[cy][cx] === CELL_SOFT_BLOCK) {
+                    gameState.grid[cy][cx] = CELL_EMPTY;
+                }
+            }
+        }
+    }
+}
+
+function spawnPlayers() {
+    for (let i = 0; i < MAX_PLAYERS; i++) {
+        const p = gameState.players[i];
+        if (p.active) {
+            const spawn = PLAYER_SPAWNS[i];
+            clearSpawnArea(spawn.gx, spawn.gy);
+            p.alive = true;
+            p.gridX = spawn.gx;
+            p.gridY = spawn.gy;
+            p.x = spawn.gx * CELL_SIZE + CELL_SIZE / 2;
+            p.y = spawn.gy * CELL_SIZE + CELL_SIZE / 2;
+            p.prevDirection = 0;
+            p.onOwnBomb = false;
+            p.maxBombs = 1;
+            p.bombRange = 1;
+            p.speed = 0.05;
+            p.bombsPlaced = 0;
+            p.direction = 0;
+        }
+    }
+    gameState.winner = null;
+    gameState.phase = GamePhase.PLAYING;
+    gameState.message = 'GO!';
+}
+
+function startBombGameRound() {
+    if (netRole !== NetRole.HOST) return;
+    initArena();
+    spawnPlayers();
+    gameState.bombs = [];
+    gameState.explosions = [];
+    gameState.powerups = [];
+    sendGameState();
+}
+
+const PLAYER_COLLISION_RADIUS = CELL_SIZE / 2;
+const BOMB_BLAST_RADIUS = CELL_SIZE * 0.38;
+
+function canMoveTo(x, y, pIdx, excludeRow = -1, excludeCol = -1) {
+    const p = gameState.players[pIdx];
+    const left = x - PLAYER_COLLISION_RADIUS;
+    const right = x + PLAYER_COLLISION_RADIUS;
+    const top = y - PLAYER_COLLISION_RADIUS;
+    const bottom = y + PLAYER_COLLISION_RADIUS;
+
+    const gx1 = Math.floor(left / CELL_SIZE);
+    const gy1 = Math.floor(top / CELL_SIZE);
+    const gx2 = Math.floor((right - 1e-6) / CELL_SIZE);
+    const gy2 = Math.floor((bottom - 1e-6) / CELL_SIZE);
+
+    for (let gy = gy1; gy <= gy2; gy++) {
+        for (let gx = gx1; gx <= gx2; gx++) {
+            if (gx < 0 || gx >= GRID_COLS || gy < 0 || gy >= GRID_ROWS) return false;
+
+            if (gy === excludeRow || gx === excludeCol) continue;
+
+            if (gameState.grid[gy][gx] !== CELL_EMPTY) return false;
+
+            for (const b of gameState.bombs) {
+                if (b.gridX === gx && b.gridY === gy) {
+                    if (b.owner !== pIdx) return false;
+                    const cbLeft = p.x - PLAYER_COLLISION_RADIUS;
+                    const cbRight = p.x + PLAYER_COLLISION_RADIUS;
+                    const cbTop = p.y - PLAYER_COLLISION_RADIUS;
+                    const cbBottom = p.y + PLAYER_COLLISION_RADIUS;
+                    const bLeft = b.gridX * CELL_SIZE;
+                    const bRight = (b.gridX + 1) * CELL_SIZE;
+                    const bTop = b.gridY * CELL_SIZE;
+                    const bBottom = (b.gridY + 1) * CELL_SIZE;
+                    const onBomb = cbRight > bLeft && cbLeft < bRight && cbBottom > bTop && cbTop < bBottom;
+                    if (!onBomb) return false;
+                }
+            }
+        }
+    }
+
+    for (let i = 0; i < MAX_PLAYERS; i++) {
+        if (i === pIdx) continue;
+        const op = gameState.players[i];
+        if (!op.active || !op.alive) continue;
+        const dx = x - op.x;
+        const dy = y - op.y;
+        if (Math.hypot(dx, dy) < PLAYER_COLLISION_RADIUS * 2) return false;
+    }
+
+    return true;
+}
+
+function isForwardBlocked(p, dir) {
+    const gx = p.gridX;
+    const gy = p.gridY;
+    switch (dir) {
+        case PlayerAction.MOVE_UP:
+            if (gy === 0) return true;
+            return gameState.grid[gy - 1][gx] !== CELL_EMPTY;
+        case PlayerAction.MOVE_DOWN:
+            if (gy >= GRID_ROWS - 1) return true;
+            return gameState.grid[gy + 1][gx] !== CELL_EMPTY;
+        case PlayerAction.MOVE_LEFT:
+            if (gx === 0) return true;
+            return gameState.grid[gy][gx - 1] !== CELL_EMPTY;
+        case PlayerAction.MOVE_RIGHT:
+            if (gx >= GRID_COLS - 1) return true;
+            return gameState.grid[gy][gx + 1] !== CELL_EMPTY;
+    }
+    return false;
+}
+
+// ============================================================
+// GAME LOGIC (HOST-SIDE)
+// ============================================================
+function applyPlayerMovement(pIdx) {
+    const p = gameState.players[pIdx];
+    if (!p || !p.alive) return;
+
+    // Read held direction
+    let dir = 0;
+    if (pIdx === localPlayerId) {
+        dir = getLocalPlayerDirection();
+    } else {
+        dir = remotePlayerDirections[pIdx];
+    }
+
+    if (dir === 0) {
+        p.prevDirection = 0;
+        return;
+    }
+
+    p.direction = dir;
+    if (dir !== p.prevDirection) p.wallSlideAxis = null;
+    const speedPx = p.speed * CELL_SIZE;
+
+    const prevX = p.x;
+    const prevY = p.y;
+
+    let dx = 0, dy = 0;
+    switch (dir) {
+        case PlayerAction.MOVE_UP: dy = -speedPx; break;
+        case PlayerAction.MOVE_DOWN: dy = speedPx; break;
+        case PlayerAction.MOVE_LEFT: dx = -speedPx; break;
+        case PlayerAction.MOVE_RIGHT: dx = speedPx; break;
+    }
+
+    const newX = p.x + dx;
+    const newY = p.y + dy;
+
+    if (canMoveTo(newX, newY, pIdx)) {
+        p.x = newX;
+        p.y = newY;
+        p.wallSlideAxis = null;
+    } else if (dy !== 0) {
+        const curGY = Math.floor(p.y / CELL_SIZE);
+        const fwdDir = dir === PlayerAction.MOVE_UP ? -1 : 1;
+        const diagGY = curGY + fwdDir;
+
+        if (p.wallSlideAxis !== 'x') {
+            const left = p.x - PLAYER_COLLISION_RADIUS;
+            const right = p.x + PLAYER_COLLISION_RADIUS;
+            const gx1 = Math.floor(left / CELL_SIZE);
+            const gx2 = Math.floor((right - 1e-6) / CELL_SIZE);
+            let wallGX = Math.floor(p.x / CELL_SIZE);
+            if (diagGY >= 0 && diagGY < GRID_ROWS) {
+                for (let gx = gx1; gx <= gx2; gx++) {
+                    if (gx >= 0 && gx < GRID_COLS && gameState.grid[diagGY][gx] !== CELL_EMPTY) {
+                        wallGX = gx;
+                        break;
+                    }
+                }
+            }
+
+            const leftGX = wallGX - 1;
+            const leftOpen = leftGX >= 0 &&
+                gameState.grid[curGY][leftGX] === CELL_EMPTY &&
+                diagGY >= 0 && diagGY < GRID_ROWS &&
+                gameState.grid[diagGY][leftGX] === CELL_EMPTY;
+
+            const rightGX = wallGX + 1;
+            const rightOpen = rightGX < GRID_COLS &&
+                gameState.grid[curGY][rightGX] === CELL_EMPTY &&
+                diagGY >= 0 && diagGY < GRID_ROWS &&
+                gameState.grid[diagGY][rightGX] === CELL_EMPTY;
+
+            const cellCX = wallGX * CELL_SIZE + CELL_SIZE / 2;
+            const offX = p.x - cellCX;
+
+            if (leftOpen && !rightOpen) {
+                p.wallSlideAxis = 'x';
+                p.wallSlideTarget = leftGX * CELL_SIZE + CELL_SIZE / 2;
+            } else if (rightOpen && !leftOpen) {
+                p.wallSlideAxis = 'x';
+                p.wallSlideTarget = rightGX * CELL_SIZE + CELL_SIZE / 2;
+            } else if (leftOpen && rightOpen && offX !== 0) {
+                p.wallSlideAxis = 'x';
+                p.wallSlideTarget = (offX < 0 ? leftGX : rightGX) * CELL_SIZE + CELL_SIZE / 2;
+            } else {
+            }
+        }
+
+        if (p.wallSlideAxis === 'x') {
+            const toTarget = p.wallSlideTarget - p.x;
+            if (Math.abs(toTarget) < 1) {
+                p.wallSlideAxis = null;
+                p.x = p.wallSlideTarget;
+            } else {
+                const step = Math.sign(toTarget) * Math.min(Math.abs(toTarget), speedPx * 0.5);
+                const sx = p.x + step;
+                if (canMoveTo(sx, p.y, pIdx, diagGY)) {
+                    p.x = sx;
+                } else {
+                    p.wallSlideAxis = null;
+                    p.x = Math.round((prevX - CELL_SIZE / 2) / CELL_SIZE) * CELL_SIZE + CELL_SIZE / 2;
+                    p.y = Math.round((prevY - CELL_SIZE / 2) / CELL_SIZE) * CELL_SIZE + CELL_SIZE / 2;
+                }
+            }
+        }
+    } else if (dx !== 0) {
+        const curGX = Math.floor(p.x / CELL_SIZE);
+        const fwdDir = dir === PlayerAction.MOVE_LEFT ? -1 : 1;
+        const diagGX = curGX + fwdDir;
+
+        if (p.wallSlideAxis !== 'y') {
+            const top = p.y - PLAYER_COLLISION_RADIUS;
+            const bottom = p.y + PLAYER_COLLISION_RADIUS;
+            const gy1 = Math.floor(top / CELL_SIZE);
+            const gy2 = Math.floor((bottom - 1e-6) / CELL_SIZE);
+            let wallGY = Math.floor(p.y / CELL_SIZE);
+            if (diagGX >= 0 && diagGX < GRID_COLS) {
+                for (let gy = gy1; gy <= gy2; gy++) {
+                    if (gy >= 0 && gy < GRID_ROWS && gameState.grid[gy][diagGX] !== CELL_EMPTY) {
+                        wallGY = gy;
+                        break;
+                    }
+                }
+            }
+
+            const upGY = wallGY - 1;
+            const upOpen = upGY >= 0 &&
+                gameState.grid[upGY][curGX] === CELL_EMPTY &&
+                diagGX >= 0 && diagGX < GRID_COLS &&
+                gameState.grid[upGY][diagGX] === CELL_EMPTY;
+
+            const downGY = wallGY + 1;
+            const downOpen = downGY < GRID_ROWS &&
+                gameState.grid[downGY][curGX] === CELL_EMPTY &&
+                diagGX >= 0 && diagGX < GRID_COLS &&
+                gameState.grid[downGY][diagGX] === CELL_EMPTY;
+
+            const cellCY = wallGY * CELL_SIZE + CELL_SIZE / 2;
+            const offY = p.y - cellCY;
+
+            if (upOpen && !downOpen) {
+                p.wallSlideAxis = 'y';
+                p.wallSlideTarget = upGY * CELL_SIZE + CELL_SIZE / 2;
+            } else if (downOpen && !upOpen) {
+                p.wallSlideAxis = 'y';
+                p.wallSlideTarget = downGY * CELL_SIZE + CELL_SIZE / 2;
+            } else if (upOpen && downOpen && offY !== 0) {
+                p.wallSlideAxis = 'y';
+                p.wallSlideTarget = (offY < 0 ? upGY : downGY) * CELL_SIZE + CELL_SIZE / 2;
+            } else {
+            }
+        }
+
+        if (p.wallSlideAxis === 'y') {
+            const toTarget = p.wallSlideTarget - p.y;
+            if (Math.abs(toTarget) < 1) {
+                p.wallSlideAxis = null;
+                p.y = p.wallSlideTarget;
+            } else {
+                const step = Math.sign(toTarget) * Math.min(Math.abs(toTarget), speedPx * 0.5);
+                const sy = p.y + step;
+                if (canMoveTo(p.x, sy, pIdx, -1, diagGX)) {
+                    p.y = sy;
+                } else {
+                    p.wallSlideAxis = null;
+                    p.x = Math.round((prevX - CELL_SIZE / 2) / CELL_SIZE) * CELL_SIZE + CELL_SIZE / 2;
+                    p.y = Math.round((prevY - CELL_SIZE / 2) / CELL_SIZE) * CELL_SIZE + CELL_SIZE / 2;
+                }
+            }
+        }
+    }
+
+    // Derive grid position
+    p.gridX = Math.floor(p.x / CELL_SIZE);
+    p.gridY = Math.floor(p.y / CELL_SIZE);
+    p.prevDirection = dir;
+
+    // Powerup pickup
+    for (let i = gameState.powerups.length - 1; i >= 0; i--) {
+        const pu = gameState.powerups[i];
+        const dist = Math.hypot(p.x - (pu.x + CELL_SIZE / 2), p.y - (pu.y + CELL_SIZE / 2));
+        if (dist < CELL_SIZE * 0.5) {
+            applyPowerup(pIdx, pu.type);
+            gameState.powerups.splice(i, 1);
+        }
+    }
+}
+
+function placeBomb(pIdx) {
+    const p = gameState.players[pIdx];
+    if (!p || !p.alive) return;
+    if (p.bombsPlaced >= p.maxBombs) return;
+    const gx = Math.floor(p.x / CELL_SIZE);
+    const gy = Math.floor(p.y / CELL_SIZE);
+
+    // Don't place if there's already a bomb at this cell
+    if (gameState.bombs.some(b => b.gridX === gx && b.gridY === gy)) return;
+
+    p.bombsPlaced++;
+    gameState.bombs.push({
+        gridX: gx, gridY: gy,
+        x: gx * CELL_SIZE + CELL_SIZE / 2,
+        y: gy * CELL_SIZE + CELL_SIZE / 2,
+        owner: pIdx,
+        timer: BOMB_TIMER_TICKS,
+        range: p.bombRange,
+        active: true
+    });
+}
+
+function explodeBomb(bomb) {
+    if (!bomb.active) return;
+    bomb.active = false;
+    const cx = bomb.gridX, cy = bomb.gridY;
+    const range = bomb.range;
+    const cells = [{gx: cx, gy: cy}];
+
+    // Spread in 4 directions
+    const dirs = [[1,0], [-1,0], [0,1], [0,-1]];
+    for (const [dx, dy] of dirs) {
+        for (let r = 1; r <= range; r++) {
+            const gx = cx + dx * r, gy = cy + dy * r;
+            if (gx < 0 || gx >= GRID_COLS || gy < 0 || gy >= GRID_ROWS) break;
+            if (gameState.grid[gy][gx] === CELL_WALL) break;
+            cells.push({gx, gy});
+            if (gameState.grid[gy][gx] === CELL_SOFT_BLOCK) break;
+        }
+    }
+
+    // Add explosion cells
+    for (const c of cells) {
+        // Don't stack explosions on same cell
+        if (!gameState.explosions.some(e => e.gridX === c.gx && e.gridY === c.gy)) {
+            gameState.explosions.push({
+                gridX: c.gx, gridY: c.gy,
+                x: c.gx * CELL_SIZE, y: c.gy * CELL_SIZE,
+                timer: EXPLOSION_DURATION
+            });
+        }
+    }
+}
+
+function checkExplosionEffects() {
+    for (const exp of gameState.explosions) {
+        // Destroy soft blocks
+        if (gameState.grid[exp.gridY][exp.gridX] === CELL_SOFT_BLOCK) {
+            gameState.grid[exp.gridY][exp.gridX] = CELL_EMPTY;
+            if (Math.random() < POWERUP_CHANCE) {
+                spawnPowerup(exp.gridX, exp.gridY);
+            }
+        }
+        // Kill players (only during dangerous phase, not during safe fade)
+        if (exp.timer > EXPLOSION_SAFE_FADE) {
+            for (let i = 0; i < MAX_PLAYERS; i++) {
+                const p = gameState.players[i];
+                if (!p.active || !p.alive) continue;
+                const r = BOMB_BLAST_RADIUS;
+                const pLeft = p.x - r, pRight = p.x + r;
+                const pTop = p.y - r, pBottom = p.y + r;
+                const eLeft = exp.gridX * CELL_SIZE, eRight = (exp.gridX + 1) * CELL_SIZE;
+                const eTop = exp.gridY * CELL_SIZE, eBottom = (exp.gridY + 1) * CELL_SIZE;
+                if (pRight > eLeft && pLeft < eRight && pBottom > eTop && pTop < eBottom) {
+                    p.alive = false;
+                }
+            }
+        }
+        // Chain bombs
+        for (const b of gameState.bombs) {
+            if (b.active && b.gridX === exp.gridX && b.gridY === exp.gridY) {
+                b.timer = 1; // detonate next tick
+            }
+        }
+    }
+}
+
+function spawnPowerup(gx, gy) {
+    const types = [PowerupType.BOMB_UP, PowerupType.FIRE_UP, PowerupType.SPEED_UP];
+    const type = types[Math.floor(Math.random() * types.length)];
+    gameState.powerups.push({ gridX: gx, gridY: gy, x: gx * CELL_SIZE, y: gy * CELL_SIZE, type });
+}
+
+function applyPowerup(pIdx, type) {
+    const p = gameState.players[pIdx];
+    switch (type) {
+        case PowerupType.BOMB_UP: p.maxBombs = Math.min(p.maxBombs + 1, 8); break;
+        case PowerupType.FIRE_UP: p.bombRange = Math.min(p.bombRange + 1, 8); break;
+        case PowerupType.SPEED_UP: p.speed = Math.min(p.speed + 0.01, 0.12); break;
+    }
+}
+
+function gameTick() {
+    if (gameState.phase !== GamePhase.PLAYING) return;
+
+    // Apply smooth movement for all active alive players
+    for (let i = 0; i < MAX_PLAYERS; i++) {
+        const p = gameState.players[i];
+        if (!p || !p.active || !p.alive) continue;
+        applyPlayerMovement(i);
+    }
+    // Handle discrete bomb placement
+    for (let i = 0; i < MAX_PLAYERS; i++) {
+        if (bombRequested[i]) {
+            placeBomb(i);
+            bombRequested[i] = false;
+        }
+    }
+
+    // Update bomb timers
+    for (const b of gameState.bombs) {
+        if (b.active) {
+            b.timer--;
+            if (b.timer <= 0) {
+                explodeBomb(b);
+            }
+        }
+    }
+
+    // Update explosion timers
+    for (let i = gameState.explosions.length - 1; i >= 0; i--) {
+        gameState.explosions[i].timer--;
+        if (gameState.explosions[i].timer <= 0) {
+            gameState.explosions.splice(i, 1);
+        }
+    }
+
+    // Check explosion effects on first tick of new explosions
+    checkExplosionEffects();
+
+    // Respawn dead players
+    for (let i = 0; i < MAX_PLAYERS; i++) {
+        const p = gameState.players[i];
+        if (p.active && !p.alive) {
+            const spawn = PLAYER_SPAWNS[i];
+            p.alive = true;
+            p.x = spawn.gx * CELL_SIZE + CELL_SIZE / 2;
+            p.y = spawn.gy * CELL_SIZE + CELL_SIZE / 2;
+            p.gridX = spawn.gx;
+            p.gridY = spawn.gy;
+            p.direction = 0;
+            p.prevDirection = 0;
+            p.wallSlideAxis = null;
+            p.bombsPlaced = 0;
+            p.onOwnBomb = false;
+        }
+    }
+
+    // Remove inactive bombs
+    gameState.bombs = gameState.bombs.filter(b => b.active);
+
+    // Release bomb count for exploded bombs
+    for (let i = 0; i < MAX_PLAYERS; i++) {
+        const p = gameState.players[i];
+        p.bombsPlaced = gameState.bombs.filter(b => b.owner === i && b.active).length;
+    }
+}
+
+function handleBombGameAction(pIdx, action) {
+    if (netRole !== NetRole.HOST) return;
+    if (gameState.phase !== GamePhase.PLAYING) return;
+    if (action === PlayerAction.PLACE_BOMB) {
+        bombRequested[pIdx] = true;
+    }
+}
+
+// ============================================================
+// NETWORKING (PRESERVED FROM BLACKJACK)
+// ============================================================
+const ICE_CONFIG = { 'iceServers': [
+    { 'urls': 'stun:stun.l.google.com:19302' },
+    { 'urls': 'stun:stun1.l.google.com:19302' },
+    { 'urls': 'stun:stun.relay.metered.ca:80' },
+    { 'urls': 'turn:global.relay.metered.ca:80', 'username': 'b91725d7ea7bd065ec4541ce', 'credential': 'mtiQ613jx/8DXIW0' },
+    { 'urls': 'turn:global.relay.metered.ca:80?transport=tcp', 'username': 'b91725d7ea7bd065ec4541ce', 'credential': 'mtiQ613jx/8DXIW0' },
+    { 'urls': 'turn:global.relay.metered.ca:443', 'username': 'b91725d7ea7bd065ec4541ce', 'credential': 'mtiQ613jx/8DXIW0' },
+    { 'urls': 'turns:global.relay.metered.ca:443?transport=tcp', 'username': 'b91725d7ea7bd065ec4541ce', 'credential': 'mtiQ613jx/8DXIW0' }
+], 'sdpSemantics': 'unified-plan' };
+const SIGNALING_CONFIG = { host: '0.peerjs.com', port: 443, path: '/' };
+let hostPeer = null, clientPeer = null;
+let hostConnections = new Array(MAX_PLAYERS).fill(null);
+let clientConnection = null;
+let pendingConnection = null;
+let playerConnectionType = new Array(MAX_PLAYERS).fill('');
+let lastAckTick = new Array(MAX_PLAYERS).fill(-1);
+let tickCounter = 0;
+let lastGameStateTime = Date.now();
+let playerDisconnected = new Array(MAX_PLAYERS).fill(false);
+let hostReconnecting = false;
+let forceRelay = false;
+
+function getIceConfig() {
+    if (!forceRelay) return ICE_CONFIG;
+    return { ...ICE_CONFIG, iceTransportPolicy: 'relay' };
+}
+
+function sendPkt(dc, type, data) {
+    if (!dc || !dc.open) return false;
+    const len = 1 + (data ? data.byteLength : 0);
+    const buf = new ArrayBuffer(len);
+    const v = new Uint8Array(buf);
+    v[0] = type;
+    if (data) v.set(new Uint8Array(data), 1);
+    dc.send(buf);
+    return true;
+}
+
+function serializeGameState() {
+    return JSON.parse(JSON.stringify(gameState));
+}
+
+function sendGameState() {
+    if (netRole !== NetRole.HOST) return;
+    const state = serializeGameState();
+    const jsonStr = JSON.stringify(state);
+    const encoder = new TextEncoder();
+    const jsonBytes = encoder.encode(jsonStr);
+    const buf = new ArrayBuffer(1 + jsonBytes.length);
+    const v = new Uint8Array(buf);
+    v[0] = PacketType.GAME_STATE;
+    v.set(jsonBytes, 1);
+    for (let i = 1; i < hostConnections.length; i++) {
+        if (hostConnections[i] && hostConnections[i].open) {
+            hostConnections[i].send(buf);
+        }
+    }
+}
+
+function checkIceCandidateType(pc, slot) {
+    pc.getStats().then(stats => {
+        stats.forEach(stat => {
+            if (stat.type === 'candidate-pair' && (stat.state === 'succeeded' || stat.selected)) {
+                const remote = stats.get(stat.remoteCandidateId);
+                const local = stats.get(stat.localCandidateId);
+                const isRelay = remote?.candidateType === 'relay' || local?.candidateType === 'relay';
+                playerConnectionType[slot] = isRelay ? 'relay' : 'direct';
+                updateLobbyUI();
+                if (netRole === NetRole.HOST) broadcastLobbyState();
+            }
+        });
+    }).catch(() => {});
+}
+
+function monitorIceConnection(conn, slot) {
+    setTimeout(() => {
+        const pc = conn.peerConnection;
+        if (!pc) return;
+        pc.addEventListener('connectionstatechange', () => {
+            const state = pc.connectionState;
+            if (state === 'connected') {
+                setIceStatus('Connection established', '#44CC44');
+                checkIceCandidateType(pc, slot);
+            } else if (state === 'failed') {
+                setIceStatus('Connection failed — check firewall/NAT', '#FF4444');
+            } else if (state === 'connecting') {
+                setIceStatus('Establishing connection...', '#8888AA');
+            }
+        });
+        if (pc.connectionState === 'connected') {
+            setIceStatus('Connection established', '#44CC44');
+            checkIceCandidateType(pc, slot);
+        }
+    }, 0);
+}
+
+function monitorClientIceConnection(conn) {
+    setTimeout(() => {
+        const pc = conn.peerConnection;
+        if (!pc) return;
+        pc.addEventListener('connectionstatechange', () => {
+            const state = pc.connectionState;
+            if (state === 'connected') {
+                setIceStatus('Connected', '#44CC44');
+            } else if (state === 'failed') {
+                setIceStatus('Connection failed — check firewall/NAT', '#FF4444');
+            } else if (state === 'connecting') {
+                setIceStatus('Establishing connection...', '#8888AA');
+            }
+        });
+        if (pc.connectionState === 'connected') {
+            setIceStatus('Connected', '#44CC44');
+        }
+    }, 0);
+}
+
+function setupHostDataConnection(conn, slot) {
+    const playerId = slot;
+    let joined = false;
+    conn.on('data', (data) => {
+        const v = new Uint8Array(data);
+        if (v.length < 1) return;
+        const type = v[0];
+        const d = v.slice(1);
+        if (type === PacketType.JOIN_REQUEST && !joined) {
+            if (gameState.players[playerId].active) return;
+            joined = true;
+            isSoloMode = false;
+            gameState.players[playerId].active = true;
+            activePlayerCount++;
+            lastAckTick[slot] = tickCounter;
+            const buf = new ArrayBuffer(1);
+            const v2 = new Uint8Array(buf);
+            v2[0] = playerId;
+            sendPkt(conn, PacketType.JOIN_ACCEPT, buf);
+            playerConnectionType[playerId] = 'direct';
+            monitorIceConnection(conn, playerId);
+            updateLobbyUI();
+            broadcastLobbyState();
+            setConnectionStatus('Player ' + (playerId + 1) + ' connected!');
+            return;
+        }
+        if (!joined) return;
+        if (type === PacketType.PLAYER_ACTION && d.length >= 1) {
+            const action = d[0];
+            handleBombGameAction(playerId, action);
+            return;
+        }
+        if (type === PacketType.PLAYER_DIRECTION && d.length >= 1) {
+            remotePlayerDirections[playerId] = d[0];
+            return;
+        }
+        if (type === PacketType.HEARTBEAT_ACK) {
+            lastAckTick[slot] = tickCounter;
+            return;
+        }
+        if (type === PacketType.PLAYER_LEAVE) {
+            handlePlayerDisconnect(slot);
+            return;
+        }
+    });
+    conn.on('close', () => {
+        handlePlayerDisconnect(slot);
+    });
+}
+
+function handlePlayerDisconnect(slot) {
+    if (slot < 1 || slot >= MAX_PLAYERS) return;
+    if (playerDisconnected[slot]) return;
+    playerDisconnected[slot] = true;
+    if (hostConnections[slot]) {
+        const c = hostConnections[slot];
+        hostConnections[slot] = null;
+        try { c.close(); } catch (e) { }
+    }
+    if (gameState.players[slot].active) {
+        gameState.players[slot].alive = false;
+        gameState.players[slot].active = false;
+        playerConnectionType[slot] = '';
+        lastAckTick[slot] = -1;
+        activePlayerCount--;
+        if (appState === AppState.LOBBY) {
+            updateLobbyUI();
+            broadcastLobbyState();
+        }
+        if (appState === AppState.PLAYING && netRole === NetRole.HOST) {
+            sendGameState();
+        }
+    }
+}
+
+function broadcastLobbyState() {
+    const buf = new ArrayBuffer(1 + MAX_PLAYERS * 2);
+    const v = new Uint8Array(buf);
+    v[0] = PacketType.LOBBY_STATE;
+    for (let i = 0; i < MAX_PLAYERS; i++) {
+        v[1 + i] = gameState.players[i].active ? 1 : 0;
+        const ct = playerConnectionType[i];
+        v[1 + MAX_PLAYERS + i] = ct === 'direct' ? 1 : (ct === 'relay' ? 2 : 0);
+    }
+    for (let i = 1; i < hostConnections.length; i++) {
+        if (hostConnections[i] && hostConnections[i].open) hostConnections[i].send(buf);
+    }
+}
+
+function onClientMessage(raw) {
+    const v = new Uint8Array(raw);
+    if (v.length < 1) return;
+    const type = v[0];
+    const data = v.slice(1);
+
+    if (type === PacketType.JOIN_ACCEPT && data.length >= 1) {
+        localPlayerId = data[0];
+        gameState.players[localPlayerId].active = true;
+        activePlayerCount++;
+        netRole = NetRole.CLIENT;
+        setStatusMsg('You are P' + (localPlayerId + 1), 300);
+        setConnectionStatus('Connected to host!');
+        document.getElementById('join-area').classList.add('hidden');
+        pendingConnection = null;
+        updateLobbyUI();
+        updateControllerUI();
+
+    } else if (type === PacketType.GAME_STATE) {
+        lastGameStateTime = Date.now();
+        const decoder = new TextDecoder();
+        const jsonStr = decoder.decode(data);
+        try {
+            const newState = JSON.parse(jsonStr);
+
+            // Save interpolation "from" (previous "to"), or init on first packet
+            if (interpStart >= 0) {
+                for (let i = 0; i < MAX_PLAYERS; i++) {
+                    interpFromX[i] = interpToX[i];
+                    interpFromY[i] = interpToY[i];
+                }
+            } else {
+                for (let i = 0; i < MAX_PLAYERS; i++) {
+                    interpFromX[i] = newState.players[i].x;
+                    interpFromY[i] = newState.players[i].y;
+                }
+            }
+            // Save interpolation "to" = the newly received positions
+            for (let i = 0; i < MAX_PLAYERS; i++) {
+                interpToX[i] = newState.players[i].x;
+                interpToY[i] = newState.players[i].y;
+            }
+            interpStart = Date.now();
+
+            gameState = newState;
+
+            if (gameState.players.length < MAX_PLAYERS) {
+                for (let i = gameState.players.length; i < MAX_PLAYERS; i++) {
+                    gameState.players.push(createPlayerState());
+                }
+            }
+        } catch (e) {
+            console.error('Failed to parse GAME_STATE:', e);
+            return;
+        }
+
+        if (appState !== AppState.PLAYING) {
+            appState = AppState.PLAYING;
+            hideAllOverlays();
+            document.getElementById('pixi-container').style.display = 'block';
+            document.getElementById('scorebar').classList.remove('hidden-ctrl');
+            updateControllerUI();
+        }
+        updateUI();
+
+    } else if (type === PacketType.LOBBY_STATE && data.length >= MAX_PLAYERS * 2) {
+        let count = 0;
+        for (let i = 0; i < MAX_PLAYERS; i++) {
+            const active = data[i] !== 0;
+            gameState.players[i].active = active;
+            if (active) count++;
+            const ctVal = data[MAX_PLAYERS + i];
+            playerConnectionType[i] = ctVal === 1 ? 'direct' : (ctVal === 2 ? 'relay' : '');
+        }
+        activePlayerCount = count;
+        updateLobbyUI();
+        if (localPlayerId >= 0 && playerConnectionType[localPlayerId]) {
+            setIceStatus('Connected via ' + playerConnectionType[localPlayerId].charAt(0).toUpperCase() + playerConnectionType[localPlayerId].slice(1), '#44CC44');
+        }
+
+    } else if (type === PacketType.HEARTBEAT) {
+        sendPkt(clientConnection, PacketType.HEARTBEAT_ACK, null);
+        lastGameStateTime = Date.now();
+
+    } else if (type === PacketType.PLAYER_LEAVE) {
+        setStatusMsg('Host disconnected', 300);
+        cleanupClient();
+        appState = AppState.MENU;
+        showMenu();
+        updateControllerUI();
+    }
+}
+
+function cleanupHost() {
+    for (let i = 1; i < hostConnections.length; i++) {
+        if (hostConnections[i]) { try { hostConnections[i].close(); } catch (e) { } }
+        hostConnections[i] = null;
+    }
+    lastAckTick = new Array(MAX_PLAYERS).fill(-1);
+    playerDisconnected = new Array(MAX_PLAYERS).fill(false);
+    hostReconnecting = false;
+    if (hostPeer) { try { hostPeer.destroy(); } catch (e) { } }
+    hostPeer = null;
+    netRole = NetRole.NONE;
+    activePlayerCount = 0;
+    localPlayerId = -1;
+    playerConnectionType = new Array(MAX_PLAYERS).fill('');
+    clearIceStatus();
+    document.getElementById('host-invite-row').classList.add('hidden');
+}
+
+function cleanupClient() {
+    if (pendingConnection) { try { pendingConnection.close(); } catch (e) { } pendingConnection = null; }
+    if (clientConnection) { try { clientConnection.close(); } catch (e) { } clientConnection = null; }
+    if (clientPeer) { try { clientPeer.destroy(); } catch (e) { } clientPeer = null; }
+    netRole = NetRole.NONE;
+    localPlayerId = -1;
+    clearIceStatus();
+}
+
+function cleanupAll() { cleanupHost(); cleanupClient(); }
+
+// ============================================================
+// FRIENDLY PEER ID GENERATION
+// ============================================================
+const ADJECTIVES = 'cool fast bold calm wise keen pure safe warm mild dark soft high low true glad kind deep rare slim busy free snug wild'.split(' ');
+const NOUNS = 'panda tiger eagle otter fox bear wolf deer hawk owl seal mole dove lynx hare kite loon ram cat elk doe eel bat'.split(' ');
+function randomSuffix(n) {
+    const c = 'abcdefghijklmnopqrstuvwxyz0123456789';
+    let s = '';
+    for (let i = 0; i < n; i++) s += c[Math.floor(Math.random() * c.length)];
+    return s;
+}
+function generateFriendlyId() {
+    const adj = ADJECTIVES[Math.floor(Math.random() * ADJECTIVES.length)];
+    const noun = NOUNS[Math.floor(Math.random() * NOUNS.length)];
+    return adj + '-' + noun + '-' + randomSuffix(4);
+}
+
+// ============================================================
+// UI CONTROL
+// ============================================================
+function hideAllOverlays() {
+    document.getElementById('menu-overlay').classList.add('hidden');
+    document.getElementById('lobby-overlay').classList.add('hidden');
+}
+
+function showMenu() {
+    hideAllOverlays();
+    document.getElementById('menu-overlay').classList.remove('hidden');
+    document.getElementById('controller-area').classList.add('hidden-ctrl');
+    document.getElementById('scorebar').classList.add('hidden-ctrl');
+    document.getElementById('game-hint').classList.add('hidden-ctrl');
+    document.getElementById('pixi-container').style.display = 'none';
+    appState = AppState.MENU;
+}
+
+let statusMsgTimeout = null;
+function setStatusMsg(msg, duration) {
+    const el = document.getElementById('menu-status');
+    if (el) {
+        el.textContent = msg;
+        el.style.color = msg.toLowerCase().includes('fail') ? '#FF4444' : '#CCCCCC';
+        if (statusMsgTimeout) clearTimeout(statusMsgTimeout);
+        if (duration) statusMsgTimeout = setTimeout(() => { if (el) el.textContent = ''; }, duration * 1000 / 60);
+    }
+}
+
+function setConnectionStatus(msg) {
+    const el1 = document.getElementById('sdp-status');
+    const el2 = document.getElementById('join-status');
+    if (el1) el1.textContent = msg;
+    if (el2) el2.textContent = msg;
+}
+
+function setIceStatus(msg, color) {
+    document.querySelectorAll('.conn-msg').forEach(el => {
+        el.textContent = msg;
+        el.style.color = color || '#8888AA';
+    });
+}
+
+function clearIceStatus() {
+    document.querySelectorAll('.conn-msg').forEach(el => {
+        el.textContent = '';
+        el.style.color = '';
+    });
+}
+
+// ============================================================
+// RENDER WITH PIXIJS
+// ============================================================
+function renderSoftBlocks() {
+    layers.softBlocks.removeChildren();
+    for (let gy = 0; gy < GRID_ROWS; gy++) {
+        for (let gx = 0; gx < GRID_COLS; gx++) {
+            if (gameState.grid[gy][gx] !== CELL_SOFT_BLOCK) continue;
+            const g = new PIXI.Graphics();
+            g.beginFill(0xC48B3C);
+            g.drawRect(gx * CELL_SIZE + 2, gy * CELL_SIZE + 2, CELL_SIZE - 4, CELL_SIZE - 4);
+            g.endFill();
+            g.beginFill(0xA07030);
+            g.drawRect(gx * CELL_SIZE + 5, gy * CELL_SIZE + 5, CELL_SIZE - 10, CELL_SIZE - 10);
+            g.endFill();
+            layers.softBlocks.addChild(g);
+        }
+    }
+}
+
+function renderPowerups() {
+    layers.powerups.removeChildren();
+    for (const pu of gameState.powerups) {
+        const g = new PIXI.Graphics();
+        const color = pu.type === PowerupType.BOMB_UP ? 0xFF4444 :
+                      pu.type === PowerupType.FIRE_UP ? 0xFFAA00 : 0x44BBFF;
+        g.beginFill(color, 0.9);
+        g.drawCircle(pu.x + CELL_SIZE/2, pu.y + CELL_SIZE/2, CELL_SIZE * 0.3);
+        g.endFill();
+        // Letter indicator
+        const letter = pu.type === PowerupType.BOMB_UP ? 'B' :
+                       pu.type === PowerupType.FIRE_UP ? 'F' : 'S';
+        const text = new PIXI.Text(letter, {
+            fontFamily: 'monospace', fontSize: Math.floor(CELL_SIZE * 0.35),
+            fontWeight: 'bold', fill: 0xFFFFFF, align: 'center'
+        });
+        text.anchor.set(0.5);
+        text.x = pu.x + CELL_SIZE/2;
+        text.y = pu.y + CELL_SIZE/2;
+        layers.powerups.addChild(g);
+        layers.powerups.addChild(text);
+    }
+}
+
+function renderBombs() {
+    layers.bombs.removeChildren();
+    const now = performance.now();
+    for (const b of gameState.bombs) {
+        if (!b.active) continue;
+        const g = new PIXI.Graphics();
+        const pulse = 1 + 0.15 * Math.sin(now * 0.015 + b.gridX * 7 + b.gridY * 13);
+        const r = CELL_SIZE * 0.35 * pulse;
+        g.beginFill(0x111111);
+        g.drawCircle(b.x, b.y, r + 2);
+        g.endFill();
+        g.beginFill(0x333333);
+        g.drawCircle(b.x, b.y, r);
+        g.endFill();
+        // Fuse spark
+        const sparkAlpha = 0.5 + 0.5 * Math.sin(now * 0.03 + b.gridX);
+        g.lineStyle(2, 0xFFAA00, sparkAlpha);
+        g.moveTo(b.x + 4, b.y - r);
+        g.lineTo(b.x + 6, b.y - r - 6);
+        layers.bombs.addChild(g);
+    }
+}
+
+function renderExplosions() {
+    layers.explosions.removeChildren();
+    for (const exp of gameState.explosions) {
+        const g = new PIXI.Graphics();
+        const progress = 1 - (exp.timer / EXPLOSION_DURATION);
+        const alpha = 1 - progress;
+        g.beginFill(0xFF6600, alpha * 0.8);
+        g.drawRect(exp.x + 2, exp.y + 2, CELL_SIZE - 4, CELL_SIZE - 4);
+        g.endFill();
+        g.beginFill(0xFFAA00, alpha * 0.5);
+        g.drawRect(exp.x + 8, exp.y + 8, CELL_SIZE - 16, CELL_SIZE - 16);
+        g.endFill();
+        g.beginFill(0xFFDD00, alpha * 0.6);
+        g.drawRect(exp.x + 14, exp.y + 14, CELL_SIZE - 28, CELL_SIZE - 28);
+        g.endFill();
+        layers.explosions.addChild(g);
+    }
+}
+
+function renderPlayers() {
+    layers.players.removeChildren();
+    for (let i = 0; i < MAX_PLAYERS; i++) {
+        const p = gameState.players[i];
+        if (!p.active || !p.alive) continue;
+
+        // Client-side interpolation for smooth visual movement
+        let renderX = p.x, renderY = p.y;
+        if (netRole === NetRole.CLIENT && interpStart >= 0) {
+            const t = Math.min((Date.now() - interpStart) / INTERP_WINDOW, 1);
+            renderX = interpFromX[i] + (interpToX[i] - interpFromX[i]) * t;
+            renderY = interpFromY[i] + (interpToY[i] - interpFromY[i]) * t;
+        }
+
+        const color = PLAYER_COLORS[i];
+        const g = new PIXI.Graphics();
+
+        // Body
+        g.beginFill(color);
+        g.drawCircle(renderX, renderY, CELL_SIZE * 0.38);
+        g.endFill();
+
+        // Eyes
+        const eyeR = CELL_SIZE * 0.08;
+        let ex1, ey1, ex2, ey2;
+        switch (p.direction) {
+            case PlayerAction.MOVE_UP: ex1 = -5; ey1 = -8; ex2 = 5; ey2 = -8; break;
+            case PlayerAction.MOVE_DOWN: ex1 = -5; ey1 = 8; ex2 = 5; ey2 = 8; break;
+            case PlayerAction.MOVE_LEFT: ex1 = -8; ey1 = -5; ex2 = -8; ey2 = 5; break;
+            case PlayerAction.MOVE_RIGHT: ex1 = 8; ey1 = -5; ex2 = 8; ey2 = 5; break;
+            default: ex1 = -5; ey1 = -8; ex2 = 5; ey2 = -8; break;
+        }
+        g.beginFill(0xFFFFFF);
+        g.drawCircle(renderX + ex1, renderY + ey1, eyeR);
+        g.drawCircle(renderX + ex2, renderY + ey2, eyeR);
+        g.endFill();
+        g.beginFill(0x111111);
+        g.drawCircle(renderX + ex1, renderY + ey1, eyeR * 0.5);
+        g.drawCircle(renderX + ex2, renderY + ey2, eyeR * 0.5);
+        g.endFill();
+
+        layers.players.addChild(g);
+    }
+}
+
+function renderAll() {
+    if (appState !== AppState.PLAYING) return;
+    renderSoftBlocks();
+    renderPowerups();
+    renderBombs();
+    renderExplosions();
+    renderPlayers();
+}
+
+// ============================================================
+// UPDATE UI
+// ============================================================
+function updateUI() {
+    if (appState !== AppState.PLAYING) return;
+    updateInfoBar();
+    updateControllerUI();
+
+    const hintEl = document.getElementById('game-hint');
+    if (gameState.message) {
+        hintEl.textContent = gameState.message;
+    } else {
+        hintEl.textContent = '';
+    }
+}
+
+function updateInfoBar() {
+    if (appState !== AppState.PLAYING) return;
+    const listEl = document.getElementById('score-player-list');
+    let html = '';
+    const playerColorHex = ['#FFD700', '#44BBFF', '#FF6B6B', '#66DD88'];
+
+    for (let i = 0; i < MAX_PLAYERS; i++) {
+        const p = gameState.players[i];
+        if (!p.active) continue;
+        const color = playerColorHex[i];
+        const you = (i === localPlayerId) ? ' (You)' : '';
+        let statusText, statusColor;
+
+        if (!p.alive) {
+            statusText = 'DEAD';
+            statusColor = '#FF4444';
+        } else {
+            statusText = 'B:' + p.maxBombs + ' R:' + p.bombRange;
+            statusColor = '#88FF88';
+        }
+
+        html += '<div class="score-player-entry">';
+        html += '<div class="score-player-name" style="color:' + color + '">P' + (i + 1) + you + '</div>';
+        html += '<div class="score-player-status" style="color:' + statusColor + '">' + statusText + '</div>';
+        html += '</div>';
+    }
+    listEl.innerHTML = html;
+}
+
+// ============================================================
+// CONTROLLER UI
+// ============================================================
+function updateControllerUI() {
+    const ctrl = document.getElementById('controller-area');
+    const btnQuit = document.getElementById('btn-quit-game');
+    const actionRow = document.getElementById('action-row');
+
+    if (appState === AppState.MENU) {
+        ctrl.classList.add('hidden-ctrl');
+        actionRow.classList.add('hidden-ctrl');
+        handleResize();
+        return;
+    }
+    ctrl.classList.remove('hidden-ctrl');
+
+    if (appState === AppState.LOBBY) {
+        document.getElementById('dpad').style.display = 'none';
+        document.getElementById('bomb-btn').style.display = 'none';
+        document.getElementById('game-hint').classList.add('hidden-ctrl');
+        actionRow.classList.add('hidden-ctrl');
+    } else if (appState === AppState.PLAYING) {
+        document.getElementById('dpad').style.display = 'grid';
+        document.getElementById('bomb-btn').style.display = 'flex';
+        btnQuit.classList.remove('hidden-btn');
+        actionRow.classList.remove('hidden-ctrl');
+        document.getElementById('game-hint').classList.remove('hidden-ctrl');
+
+        const isAlive = gameState.players[localPlayerId] && gameState.players[localPlayerId].alive;
+        document.getElementById('bomb-btn').disabled = !isAlive || gameState.phase !== GamePhase.PLAYING;
+    }
+    handleResize();
+}
+
+// ============================================================
+// INPUT HANDLING
+// ============================================================
+function handleLocalAction(action) {
+    if (appState !== AppState.PLAYING) return;
+    if (!gameState.players[localPlayerId] || !gameState.players[localPlayerId].alive) return;
+    if (gameState.phase !== GamePhase.PLAYING) return;
+
+    if (netRole === NetRole.HOST) {
+        handleBombGameAction(localPlayerId, action);
+    } else if (netRole === NetRole.CLIENT && clientConnection && clientConnection.open) {
+        const buf = new ArrayBuffer(2);
+        const v = new Uint8Array(buf);
+        v[0] = PacketType.PLAYER_ACTION;
+        v[1] = action;
+        clientConnection.send(buf);
+    }
+}
+
+// Keyboard
+const keyState = {};
+let lastDirectionalKey = '';
+document.addEventListener('keydown', (e) => {
+    if (e.repeat) return;
+    if (appState === AppState.MENU) {
+        switch (e.key) {
+            case '1':
+                if (!document.getElementById('menu-overlay').classList.contains('hidden')) createGame();
+                break;
+            case '2':
+                if (!document.getElementById('menu-overlay').classList.contains('hidden')) showJoinUI();
+                break;
+            case 'x': case 'X': case 'Escape': window.close(); break;
+        }
+        return;
+    }
+    if (appState === AppState.LOBBY) {
+        if (e.key === ' ' || e.key === 'Space') { e.preventDefault(); onActionStart(); }
+        if (e.key === 'x' || e.key === 'X' || e.key === 'Escape') { onActionQuit(); }
+        return;
+    }
+    if (appState === AppState.PLAYING) {
+        if (e.key === 'x' || e.key === 'X' || e.key === 'Escape') { onActionQuit(); return; }
+        if (e.key === ' ' || e.key === 'Space') { e.preventDefault(); handleLocalAction(PlayerAction.PLACE_BOMB); return; }
+        keyState[e.key] = true;
+        if (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'ArrowRight' ||
+            e.key === 'w' || e.key === 'W' || e.key === 's' || e.key === 'S' ||
+            e.key === 'a' || e.key === 'A' || e.key === 'd' || e.key === 'D') {
+            lastDirectionalKey = e.key;
+        }
+    }
+});
+
+document.addEventListener('keyup', (e) => {
+    if (e.repeat) return;
+    delete keyState[e.key];
+    if (e.key === lastDirectionalKey) {
+        lastDirectionalKey = '';
+    }
+});
+
+// Continuous movement via key polling
+function getLocalPlayerDirection() {
+    if (touchDirection !== 0) return touchDirection;
+
+    if (lastDirectionalKey && keyState[lastDirectionalKey]) {
+        switch (lastDirectionalKey) {
+            case 'ArrowUp': case 'w': case 'W': return PlayerAction.MOVE_UP;
+            case 'ArrowDown': case 's': case 'S': return PlayerAction.MOVE_DOWN;
+            case 'ArrowLeft': case 'a': case 'A': return PlayerAction.MOVE_LEFT;
+            case 'ArrowRight': case 'd': case 'D': return PlayerAction.MOVE_RIGHT;
+        }
+    }
+
+    if (keyState['ArrowUp'] || keyState['w'] || keyState['W']) return PlayerAction.MOVE_UP;
+    if (keyState['ArrowDown'] || keyState['s'] || keyState['S']) return PlayerAction.MOVE_DOWN;
+    if (keyState['ArrowLeft'] || keyState['a'] || keyState['A']) return PlayerAction.MOVE_LEFT;
+    if (keyState['ArrowRight'] || keyState['d'] || keyState['D']) return PlayerAction.MOVE_RIGHT;
+    return 0;
+}
+
+let _lastDirectionSent = -1;
+let _lastDirectionSentTime = 0;
+
+function sendDirectionToHost(dir) {
+    if (!clientConnection || !clientConnection.open) return;
+    const now = Date.now();
+    if (dir !== _lastDirectionSent || now - _lastDirectionSentTime > 16) {
+        const buf = new ArrayBuffer(2);
+        const v = new Uint8Array(buf);
+        v[0] = PacketType.PLAYER_DIRECTION;
+        v[1] = dir;
+        clientConnection.send(buf);
+        _lastDirectionSent = dir;
+        _lastDirectionSentTime = now;
+    }
+}
+
+function processKeyInput() {
+    if (appState !== AppState.PLAYING) return;
+    const p = gameState.players[localPlayerId];
+    if (!p || !p.alive) return;
+    if (gameState.phase !== GamePhase.PLAYING) return;
+
+    if (netRole === NetRole.CLIENT) {
+        sendDirectionToHost(getLocalPlayerDirection());
+    }
+    // Host reads keyState directly in applyPlayerMovement — nothing needed here
+}
+
+// Touch D-pad
+let touchDirection = 0;
+
+function setupDpad() {
+    const bindings = {
+        'btn-up': PlayerAction.MOVE_UP,
+        'btn-down': PlayerAction.MOVE_DOWN,
+        'btn-left': PlayerAction.MOVE_LEFT,
+        'btn-right': PlayerAction.MOVE_RIGHT
+    };
+    for (const [id, action] of Object.entries(bindings)) {
+        const btn = document.getElementById(id);
+        btn.addEventListener('pointerdown', (e) => {
+            e.preventDefault();
+            btn.classList.add('pressed');
+            touchDirection = action;
+        });
+        btn.addEventListener('pointerup', (e) => {
+            e.preventDefault();
+            btn.classList.remove('pressed');
+            if (touchDirection === action) touchDirection = 0;
+        });
+        btn.addEventListener('pointerleave', (e) => {
+            btn.classList.remove('pressed');
+            if (touchDirection === action) touchDirection = 0;
+        });
+        btn.addEventListener('pointerenter', (e) => {
+            if (e.buttons & 1) {
+                btn.classList.add('pressed');
+                touchDirection = action;
+            }
+        });
+    }
+    document.getElementById('bomb-btn').addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        handleLocalAction(PlayerAction.PLACE_BOMB);
+    });
+}
+setupDpad();
+
+// ============================================================
+// ACTION BUTTONS
+// ============================================================
+function onActionStart() {
+    if (appState === AppState.LOBBY && netRole === NetRole.HOST && activePlayerCount >= 1) {
+        appState = AppState.PLAYING;
+        hideAllOverlays();
+        document.getElementById('pixi-container').style.display = 'block';
+        document.getElementById('scorebar').classList.remove('hidden-ctrl');
+        document.getElementById('game-hint').classList.remove('hidden-ctrl');
+        startBombGameRound();
+        updateControllerUI();
+    }
+}
+
+function onActionQuit() {
+    if (appState === AppState.LOBBY) {
+        if (netRole === NetRole.CLIENT) cancelJoin();
+        else { cleanupHost(); showMenu(); }
+    } else if (appState === AppState.PLAYING) {
+        cleanupAll();
+        appState = AppState.MENU;
+        showMenu();
+    }
+    updateControllerUI();
+}
+
+// Button wiring
+document.getElementById('btn-lobby-start').addEventListener('click', onActionStart);
+document.getElementById('btn-lobby-cancel').addEventListener('click', onActionQuit);
+document.getElementById('btn-quit-game').addEventListener('click', onActionQuit);
+
+// ============================================================
+// CREATE GAME (HOST)
+// ============================================================
+function createPeerWithFriendlyId() {
+    return new Promise((resolve, reject) => {
+        let attempts = 0;
+        const TIMEOUT_MS = 15000;
+        let timedOut = false;
+        const timer = setTimeout(() => {
+            timedOut = true;
+            reject(new Error('Timed out connecting to signaling server'));
+        }, TIMEOUT_MS);
+        function tryCreate() {
+            if (timedOut) return;
+            const id = generateFriendlyId();
+            const p = new Peer(id, { ...SIGNALING_CONFIG, config: getIceConfig() });
+            p.on('open', () => {
+                if (timedOut) { p.destroy(); return; }
+                clearTimeout(timer);
+                resolve({ peer: p, id: p.id });
+            });
+            p.on('error', (err) => {
+                if (timedOut) return;
+                if (err.type === 'id-taken' && attempts < 5) {
+                    attempts++;
+                    p.destroy();
+                    tryCreate();
+                } else {
+                    clearTimeout(timer);
+                    reject(err);
+                }
+            });
+        }
+        tryCreate();
+    });
+}
+
+async function createGame() {
+    cleanupAll();
+    forceRelay = document.getElementById('cb-force-relay').checked;
+    netRole = NetRole.HOST;
+    localPlayerId = 0;
+    activePlayerCount = 1;
+    isSoloMode = true;
+    playerConnectionType = new Array(MAX_PLAYERS).fill('');
+    playerConnectionType[0] = 'direct';
+
+    for (let i = 0; i < MAX_PLAYERS; i++) {
+        gameState.players[i] = createPlayerState();
+    }
+    gameState.players[0].active = true;
+    gameState.phase = GamePhase.WAITING;
+    gameState.round = 0;
+    gameState.message = '';
+    initArena();
+    remotePlayerDirections = [0, 0, 0, 0];
+    bombRequested = [false, false, false, false];
+
+    appState = AppState.LOBBY;
+    hideAllOverlays();
+    document.getElementById('pixi-container').style.display = 'none';
+    document.getElementById('lobby-overlay').classList.remove('hidden');
+    document.getElementById('join-area').classList.add('hidden');
+    document.getElementById('lobby-actions').style.display = 'flex';
+    updateLobbyUI();
+    updateControllerUI();
+
+    try {
+        const result = await createPeerWithFriendlyId();
+        hostPeer = result.peer;
+        hostPeer.on('connection', (conn) => {
+            let slot = -1;
+            for (let i = 1; i < MAX_PLAYERS; i++) { if (!hostConnections[i]) { slot = i; break; } }
+            if (slot === -1) { try { conn.close(); } catch (e) { } return; }
+            hostConnections[slot] = conn;
+            playerDisconnected[slot] = false;
+            setupHostDataConnection(conn, slot);
+        });
+        hostPeer.on('error', (err) => {
+            console.error('PeerJS error:', err);
+            setConnectionStatus('Error: ' + err.type);
+        });
+        hostPeer.on('disconnected', () => {
+            if (hostReconnecting) return;
+            hostReconnecting = true;
+            let attempts = 0;
+            let timer = null;
+            const MAX = 3;
+            const DELAYS = [1000, 2000, 4000];
+
+            const onOpen = () => {
+                if (timer) clearTimeout(timer);
+                hostPeer.off('open', onOpen);
+                if (hostReconnecting) {
+                    hostReconnecting = false;
+                    setConnectionStatus('Reconnected! Your game ID: ' + hostPeer.id);
+                }
+            };
+            hostPeer.on('open', onOpen);
+
+            function retry() {
+                attempts++;
+                setConnectionStatus('Game server connection lost. Reconnecting (' + attempts + '/' + MAX + ')...');
+                hostPeer.reconnect();
+                if (attempts < MAX) {
+                    timer = setTimeout(retry, DELAYS[attempts - 1]);
+                } else {
+                    hostPeer.off('open', onOpen);
+                    hostReconnecting = false;
+                    setConnectionStatus('Could not reconnect to game server. Ask other players to rejoin if needed.');
+                }
+            }
+
+            timer = setTimeout(retry, 1000);
+        });
+        setConnectionStatus('Your game ID: ' + result.id);
+        const link = window.location.origin + window.location.pathname + '?join=' + result.id + (forceRelay ? '&relay=1' : '');
+        document.getElementById('invite-link-input').value = link;
+        document.getElementById('host-invite-row').classList.remove('hidden');
+        const qrContainer = document.getElementById('qr-container');
+        qrContainer.innerHTML = '';
+        new QRCode(qrContainer, { text: link, width: 150, height: 150, colorDark: '#FF6600', colorLight: '#0D0D1A', correctLevel: QRCode.CorrectLevel.H });
+        document.getElementById('lobby-wait-msg').textContent = 'Share the invite link with friends!';
+    } catch (e) {
+        console.error('Failed to create peer:', e);
+        setConnectionStatus('Failed to connect to signaling server. Check your internet connection and try again.');
+    }
+
+    try {
+        const resp = await fetch('https://api.ipify.org?format=json');
+        const data = await resp.json();
+        document.getElementById('host-ip-info').textContent = 'Public IP: ' + data.ip + ' : 1234';
+    } catch (e) {
+        document.getElementById('host-ip-info').textContent = 'LAN mode (share IP manually)';
+    }
+}
+
+// ============================================================
+// COPY INVITE LINK
+// ============================================================
+function copyInviteLink() {
+    const input = document.getElementById('invite-link-input');
+    input.select();
+    input.setSelectionRange(0, 9999999);
+    navigator.clipboard.writeText(input.value).then(() => {
+        document.getElementById('btn-copy-link').textContent = 'Copied!';
+        setTimeout(() => { document.getElementById('btn-copy-link').textContent = 'Copy Link'; }, 2000);
+    }).catch(() => {
+        document.execCommand('copy');
+        document.getElementById('btn-copy-link').textContent = 'Copied!';
+        setTimeout(() => { document.getElementById('btn-copy-link').textContent = 'Copy Link'; }, 2000);
+    });
+}
+
+// ============================================================
+// JOIN GAME (CLIENT)
+// ============================================================
+function showJoinUI() {
+    document.getElementById('menu-overlay').classList.add('hidden');
+    document.getElementById('lobby-overlay').classList.remove('hidden');
+    document.getElementById('pixi-container').style.display = 'none';
+    document.getElementById('host-ip-info').textContent = '';
+    document.getElementById('host-invite-row').classList.add('hidden');
+    document.getElementById('lobby-wait-msg').textContent = '';
+    clearIceStatus();
+    document.getElementById('lobby-actions').style.display = 'none';
+    document.getElementById('join-area').classList.remove('hidden');
+    document.getElementById('join-input').value = '';
+    document.getElementById('join-input').style.display = '';
+    document.getElementById('join-status').textContent = '';
+    document.getElementById('btn-join-submit').textContent = 'Join';
+    document.getElementById('btn-join-submit').disabled = false;
+    document.getElementById('btn-join-submit').onclick = manualJoin;
+    appState = AppState.LOBBY;
+    netRole = NetRole.NONE;
+    updateLobbyUI();
+    updateControllerUI();
+}
+
+async function manualJoin() {
+    const input = document.getElementById('join-input').value.trim();
+    if (!input) { document.getElementById('join-status').textContent = "Enter the host's peer ID or invite link."; return; }
+    let peerId = input;
+    try {
+        const url = new URL(input);
+        const j = url.searchParams.get('join');
+        if (j) peerId = j;
+        if (url.searchParams.get('relay') === '1') forceRelay = true;
+    } catch (e) { /* not a URL */ }
+    document.getElementById('join-status').textContent = 'Connecting...';
+    await connectToHost(peerId, true);
+}
+
+async function connectToHost(peerId, autoJoin) {
+    if (clientPeer) { cleanupClient(); }
+    pendingConnection = null;
+
+    const CONNECT_TIMEOUT_MS = 20000;
+    const MAX_RETRIES = 2;
+    const RETRY_DELAY_MS = 2000;
+    let resolved = false;
+    let retries = 0;
+    const showRetryError = (msg) => {
+        document.getElementById('join-status').textContent = msg;
+        document.getElementById('btn-join-submit').textContent = 'Retry';
+        document.getElementById('btn-join-submit').disabled = false;
+        document.getElementById('btn-join-submit').onclick = () => connectToHost(peerId, !!autoJoin);
+    };
+
+    function attempt() {
+        resolved = false;
+        const timer = setTimeout(() => {
+            if (resolved) return;
+            resolved = true;
+            cleanupClient();
+            showRetryError('Connection timed out. Could not reach host.');
+        }, CONNECT_TIMEOUT_MS);
+
+        clientPeer = new Peer({ ...SIGNALING_CONFIG, config: getIceConfig() });
+        clientPeer.on('open', () => {
+            document.getElementById('join-status').textContent = 'Connecting to host...';
+            const conn = clientPeer.connect(peerId);
+            pendingConnection = conn;
+            conn.on('open', () => {
+                if (resolved) return;
+                resolved = true;
+                clearTimeout(timer);
+                monitorClientIceConnection(conn);
+                if (autoJoin) {
+                    doJoin();
+                } else {
+                    document.getElementById('join-status').textContent = 'Game found! Click JOIN to connect.';
+                    document.getElementById('btn-join-submit').textContent = 'JOIN GAME';
+                    document.getElementById('btn-join-submit').disabled = false;
+                    document.getElementById('btn-join-submit').onclick = doJoin;
+                    document.getElementById('join-input').style.display = 'none';
+                }
+            });
+            conn.on('data', onClientMessage);
+            conn.on('close', () => {
+                if (clientConnection) {
+                    setStatusMsg('Disconnected from host', 300);
+                    cleanupClient();
+                    appState = AppState.MENU;
+                    showMenu();
+                    updateControllerUI();
+                } else {
+                    if (timer) clearTimeout(timer);
+                    showRetryError('Connection lost. The host may have left.');
+                }
+            });
+            conn.on('error', (err) => {
+                console.error('DataConnection error:', err);
+                if (clientConnection) {
+                    cleanupClient();
+                    appState = AppState.MENU;
+                    showMenu();
+                    updateControllerUI();
+                } else {
+                    if (timer) clearTimeout(timer);
+                    showRetryError('Connection error: ' + err);
+                }
+            });
+        });
+        clientPeer.on('error', (err) => {
+            if (resolved) return;
+            resolved = true;
+            clearTimeout(timer);
+            console.error('Client PeerJS error:', err);
+            cleanupClient();
+            if (err.type === 'peer-unavailable' && retries < MAX_RETRIES) {
+                retries++;
+                document.getElementById('join-status').textContent = 'Retrying... (' + retries + '/' + MAX_RETRIES + ')';
+                setTimeout(attempt, RETRY_DELAY_MS);
+                return;
+            }
+            const friendly = {
+                'browser-incompatible': 'Your browser is not supported for WebRTC connections',
+                'disconnected': 'Lost connection to the signaling server',
+                'invalid-id': 'The host ID provided is not valid',
+                'network': 'Network error. Check your internet connection.',
+                'peer-unavailable': 'Host not found. The host lost connection to the game server. Ask them to restart the game.',
+                'webrtc': 'WebRTC connection failed. Check your firewall settings.'
+            };
+            showRetryError(friendly[err.type] || 'Connection failed: ' + err.type);
+        });
+    }
+
+    attempt();
+}
+
+function doJoin() {
+    if (clientConnection) return;
+    const conn = pendingConnection;
+    if (!conn || !conn.open) return;
+    const buf = new ArrayBuffer(1);
+    const v = new Uint8Array(buf);
+    v[0] = PacketType.JOIN_REQUEST;
+    conn.send(buf);
+    clientConnection = conn;
+    document.getElementById('join-status').textContent = 'Joining game...';
+    document.getElementById('btn-join-submit').disabled = true;
+}
+
+function cancelJoin() {
+    cleanupClient();
+    document.getElementById('lobby-overlay').classList.add('hidden');
+    document.getElementById('join-area').classList.add('hidden');
+    document.getElementById('menu-overlay').classList.remove('hidden');
+    document.getElementById('controller-area').classList.add('hidden-ctrl');
+    document.getElementById('scorebar').classList.add('hidden-ctrl');
+    document.getElementById('game-hint').classList.add('hidden-ctrl');
+    document.getElementById('pixi-container').style.display = 'none';
+    appState = AppState.MENU;
+}
+
+function checkAutoJoin() {
+    const params = new URLSearchParams(window.location.search);
+    const joinId = params.get('join');
+    if (joinId) {
+        if (params.get('relay') === '1') forceRelay = true;
+        setTimeout(() => {
+            showJoinUI();
+            document.getElementById('join-input').value = joinId;
+            document.getElementById('join-input').style.display = 'none';
+            document.getElementById('btn-join-submit').disabled = true;
+            document.getElementById('btn-join-submit').textContent = 'Looking...';
+            connectToHost(joinId);
+        }, 500);
+    }
+}
+
+// ============================================================
+// UPDATE LOBBY UI
+// ============================================================
+function updateLobbyUI() {
+    document.getElementById('player-count').textContent = activePlayerCount;
+    const listEl = document.getElementById('player-list');
+    let html = '';
+    const playerColors = ['#FFD700', '#44BBFF', '#FF6B6B', '#66DD88'];
+    for (let i = 0; i < MAX_PLAYERS; i++) {
+        if (gameState.players[i].active) {
+            const color = playerColors[i];
+            const you = (i === localPlayerId) ? ' (YOU)' : '';
+            const ctype = playerConnectionType[i];
+            html += '<div class="p-entry"><span class="connected-dot" style="background:' + color + '"></span>Player ' + (i + 1) + you + (i === 0 ? ' (Host)' : (ctype ? ' (' + ctype.charAt(0).toUpperCase() + ctype.slice(1) + ')' : '')) + '</div>';
+        }
+    }
+    listEl.innerHTML = html;
+    const startHint = document.getElementById('start-hint');
+    const btnLobbyStart = document.getElementById('btn-lobby-start');
+    if (netRole === NetRole.HOST && activePlayerCount >= 1) {
+        startHint.classList.remove('hidden');
+        btnLobbyStart.style.display = 'inline-block';
+    } else {
+        startHint.classList.add('hidden');
+        btnLobbyStart.style.display = 'none';
+    }
+    if (netRole === NetRole.HOST) {
+        document.getElementById('lobby-title').textContent = 'LOBBY (HOST)';
+        document.getElementById('lobby-wait-msg').textContent = 'Press SPACE or tap Start to begin!';
+    } else if (netRole === NetRole.CLIENT) {
+        document.getElementById('lobby-title').textContent = 'LOBBY';
+        document.getElementById('lobby-wait-msg').textContent = 'Waiting for host to start...';
+    } else {
+        document.getElementById('lobby-title').textContent = 'LOBBY';
+        document.getElementById('lobby-wait-msg').textContent = 'Enter the invite link or peer ID to join.';
+    }
+}
+
+// ============================================================
+// GAME LOOP
+// ============================================================
+let _lastUIUpdate = 0;
+function pixiLoop() {
+    if (appState === AppState.PLAYING) {
+        renderAll();
+        processKeyInput();
+        const now = Date.now();
+        if (now - _lastUIUpdate > 200) {
+            updateUI();
+            _lastUIUpdate = now;
+        }
+    }
+}
+
+// ============================================================
+// HOST GAME TICK (Web Worker + rAF override when window active)
+// ============================================================
+let gameTickCounter = 0;
+let _hostRafId = null;
+
+function _hostRafLoop() {
+    if (appState === AppState.PLAYING && netRole === NetRole.HOST) {
+        gameTickCounter++;
+        gameTick();
+        if (gameTickCounter % 3 === 0) sendGameState();
+    }
+    _hostRafId = requestAnimationFrame(_hostRafLoop);
+}
+
+document.addEventListener('visibilitychange', () => {
+    if (netRole === NetRole.HOST && appState === AppState.PLAYING) {
+        if (document.hidden) {
+            if (_hostRafId) { cancelAnimationFrame(_hostRafId); _hostRafId = null; }
+        } else if (!_hostRafId) {
+            _hostRafId = requestAnimationFrame(_hostRafLoop);
+        }
+    }
+});
+
+// Always-on rAF (no-ops until appState=PLAYING + netRole=HOST)
+if (!document.hidden) {
+    _hostRafId = requestAnimationFrame(_hostRafLoop);
+}
+
+try {
+    const _wb = new Blob(['setInterval(function(){postMessage(0)},16)'], {type:'text/javascript'});
+    const tickWorker = new Worker(URL.createObjectURL(_wb));
+    tickWorker.onmessage = () => {
+        if (_hostRafId) return;
+        if (appState === AppState.PLAYING && netRole === NetRole.HOST) {
+            gameTickCounter++;
+            gameTick();
+            if (gameTickCounter % 3 === 0) sendGameState();
+        }
+    };
+} catch(e) {
+    console.warn('Web Worker unavailable, falling back to MessageChannel timing');
+    (function fallbackLoop() {
+        let lastTick = Date.now();
+        const ch = new MessageChannel();
+        ch.port1.onmessage = () => {
+            if (_hostRafId) { ch.port2.postMessage(null); return; }
+            if (appState === AppState.PLAYING && netRole === NetRole.HOST) {
+                const now = Date.now();
+                if (now - lastTick >= 16) {
+                    lastTick += 16;
+                    gameTickCounter++;
+                    gameTick();
+                    if (gameTickCounter % 3 === 0) sendGameState();
+                }
+            }
+            ch.port2.postMessage(null);
+        };
+        ch.port2.postMessage(null);
+    })();
+}
+
+// ============================================================
+// INIT
+// ============================================================
+function init() {
+    for (let i = 0; i < MAX_PLAYERS; i++) {
+        gameState.players[i] = createPlayerState();
+    }
+    gameState.phase = GamePhase.WAITING;
+    gameState.round = 0;
+    gameState.winner = null;
+    gameState.bombs = [];
+    gameState.explosions = [];
+    gameState.powerups = [];
+    gameState.message = '';
+    appState = AppState.MENU;
+    netRole = NetRole.NONE;
+    localPlayerId = -1;
+    activePlayerCount = 0;
+    playerConnectionType = new Array(MAX_PLAYERS).fill('');
+    lastAckTick = new Array(MAX_PLAYERS).fill(-1);
+    tickCounter = 0;
+    lastGameStateTime = Date.now();
+    playerDisconnected = new Array(MAX_PLAYERS).fill(false);
+    hostConnections = new Array(MAX_PLAYERS).fill(null);
+    remotePlayerDirections = [0, 0, 0, 0];
+    bombRequested = [false, false, false, false];
+
+    initPixi();
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    showMenu();
+    app.ticker.add(pixiLoop);
+}
+
+init();
+checkAutoJoin();
+
+// ============================================================
+// HEARTBEAT + LOBBY UI + CLIENT DISCONNECT DETECTION
+// ============================================================
+setInterval(() => {
+    if (appState === AppState.LOBBY) {
+        const startHint = document.getElementById('start-hint');
+        if (netRole === NetRole.HOST && activePlayerCount >= 1) {
+            startHint.classList.remove('hidden');
+        } else { startHint.classList.add('hidden'); }
+    }
+    // Host heartbeat
+    if (appState !== AppState.MENU && netRole === NetRole.HOST) {
+        tickCounter++;
+        if (tickCounter % 10 === 0) {
+            for (let i = 1; i < MAX_PLAYERS; i++) {
+                if (hostConnections[i] && gameState.players[i].active)
+                    sendPkt(hostConnections[i], PacketType.HEARTBEAT, null);
+            }
+        }
+        if (tickCounter % 2 === 0) {
+            for (let i = 1; i < MAX_PLAYERS; i++) {
+                if (hostConnections[i] && lastAckTick[i] >= 0 && tickCounter - lastAckTick[i] > 20)
+                    handlePlayerDisconnect(i);
+            }
+        }
+    }
+    // Client: detect host disconnect (30s without any packet)
+    if (appState !== AppState.MENU && netRole === NetRole.CLIENT) {
+        if (Date.now() - lastGameStateTime > 30000) {
+            setStatusMsg('Host disconnected', 300);
+            cleanupClient();
+            appState = AppState.MENU;
+            showMenu();
+            updateControllerUI();
+        }
+    }
+    updateControllerUI();
+}, 500);
+
+// ============================================================
+// BROWSER CLOSE DETECTION
+// ============================================================
+window.addEventListener('beforeunload', () => {
+    if (netRole === NetRole.CLIENT && clientConnection && clientConnection.open) {
+        try {
+            const buf = new ArrayBuffer(1);
+            const v = new Uint8Array(buf);
+            v[0] = PacketType.PLAYER_LEAVE;
+            clientConnection.send(buf);
+        } catch (e) { }
+    } else if (netRole === NetRole.HOST) {
+        const buf = new ArrayBuffer(1);
+        const v = new Uint8Array(buf);
+        v[0] = PacketType.PLAYER_LEAVE;
+        for (let i = 1; i < MAX_PLAYERS; i++) {
+            if (hostConnections[i] && hostConnections[i].open) {
+                try { hostConnections[i].send(buf); } catch (e) { }
+            }
+        }
+    }
+});
+
+console.log('BombGame 4P Multiplayer loaded!');
+</script>
+</body>
+</html>
