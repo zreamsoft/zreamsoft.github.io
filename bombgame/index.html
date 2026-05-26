@@ -462,6 +462,7 @@ let gameState = {
     bombs: [],
     explosions: [],
     powerups: [],
+    blockAnimations: [],
     message: ''
 };
 
@@ -477,6 +478,9 @@ function createPlayerState() {
         prevDirection: 0,
         wallSlideAxis: null,
         wallSlideTarget: 0,
+        deathTimer: 0,
+        deathX: 0, deathY: 0,
+        deathParticles: [],
         onOwnBomb: false,
         bombsPlaced: 0
     };
@@ -580,6 +584,7 @@ function startBombGameRound() {
     spawnPlayers();
     gameState.bombs = [];
     gameState.explosions = [];
+    gameState.blockAnimations = [];
     gameState.powerups = [];
     sendGameState();
 }
@@ -603,23 +608,20 @@ function canMoveTo(x, y, pIdx, excludeRow = -1, excludeCol = -1) {
         for (let gx = gx1; gx <= gx2; gx++) {
             if (gx < 0 || gx >= GRID_COLS || gy < 0 || gy >= GRID_ROWS) return false;
 
-            if (gy === excludeRow || gx === excludeCol) continue;
-
-            if (gameState.grid[gy][gx] !== CELL_EMPTY) return false;
+            if (gy !== excludeRow && gx !== excludeCol) {
+                if (gameState.grid[gy][gx] !== CELL_EMPTY) return false;
+            }
 
             for (const b of gameState.bombs) {
+                if (!b.active) continue;
                 if (b.gridX === gx && b.gridY === gy) {
                     if (b.owner !== pIdx) return false;
-                    const cbLeft = p.x - PLAYER_COLLISION_RADIUS;
-                    const cbRight = p.x + PLAYER_COLLISION_RADIUS;
-                    const cbTop = p.y - PLAYER_COLLISION_RADIUS;
-                    const cbBottom = p.y + PLAYER_COLLISION_RADIUS;
-                    const bLeft = b.gridX * CELL_SIZE;
-                    const bRight = (b.gridX + 1) * CELL_SIZE;
-                    const bTop = b.gridY * CELL_SIZE;
-                    const bBottom = (b.gridY + 1) * CELL_SIZE;
-                    const onBomb = cbRight > bLeft && cbLeft < bRight && cbBottom > bTop && cbTop < bBottom;
-                    if (!onBomb) return false;
+                    if (p.onOwnBomb) continue;
+                    const bCX = b.gridX * CELL_SIZE + CELL_SIZE / 2;
+                    const bCY = b.gridY * CELL_SIZE + CELL_SIZE / 2;
+                    const curDistSq = (p.x - bCX) ** 2 + (p.y - bCY) ** 2;
+                    const newDistSq = (x - bCX) ** 2 + (y - bCY) ** 2;
+                    if (newDistSq < curDistSq) return false;
                 }
             }
         }
@@ -709,7 +711,7 @@ function applyPlayerMovement(pIdx) {
             const right = p.x + PLAYER_COLLISION_RADIUS;
             const gx1 = Math.floor(left / CELL_SIZE);
             const gx2 = Math.floor((right - 1e-6) / CELL_SIZE);
-            let wallGX = Math.floor(p.x / CELL_SIZE);
+            let wallGX = -1;
             if (diagGY >= 0 && diagGY < GRID_ROWS) {
                 for (let gx = gx1; gx <= gx2; gx++) {
                     if (gx >= 0 && gx < GRID_COLS && gameState.grid[diagGY][gx] !== CELL_EMPTY) {
@@ -719,30 +721,33 @@ function applyPlayerMovement(pIdx) {
                 }
             }
 
-            const leftGX = wallGX - 1;
-            const leftOpen = leftGX >= 0 &&
-                gameState.grid[curGY][leftGX] === CELL_EMPTY &&
-                diagGY >= 0 && diagGY < GRID_ROWS &&
-                gameState.grid[diagGY][leftGX] === CELL_EMPTY;
+            if (wallGX !== -1) {
+                const leftGX = wallGX - 1;
+                const leftOpen = leftGX >= 0 &&
+                    gameState.grid[curGY][leftGX] === CELL_EMPTY &&
+                    diagGY >= 0 && diagGY < GRID_ROWS &&
+                    gameState.grid[diagGY][leftGX] === CELL_EMPTY;
 
-            const rightGX = wallGX + 1;
-            const rightOpen = rightGX < GRID_COLS &&
-                gameState.grid[curGY][rightGX] === CELL_EMPTY &&
-                diagGY >= 0 && diagGY < GRID_ROWS &&
-                gameState.grid[diagGY][rightGX] === CELL_EMPTY;
+                const rightGX = wallGX + 1;
+                const rightOpen = rightGX < GRID_COLS &&
+                    gameState.grid[curGY][rightGX] === CELL_EMPTY &&
+                    diagGY >= 0 && diagGY < GRID_ROWS &&
+                    gameState.grid[diagGY][rightGX] === CELL_EMPTY;
 
-            const cellCX = wallGX * CELL_SIZE + CELL_SIZE / 2;
-            const offX = p.x - cellCX;
+                const cellCX = wallGX * CELL_SIZE + CELL_SIZE / 2;
+                const offX = p.x - cellCX;
 
-            if (leftOpen && !rightOpen) {
-                p.wallSlideAxis = 'x';
-                p.wallSlideTarget = leftGX * CELL_SIZE + CELL_SIZE / 2;
-            } else if (rightOpen && !leftOpen) {
-                p.wallSlideAxis = 'x';
-                p.wallSlideTarget = rightGX * CELL_SIZE + CELL_SIZE / 2;
-            } else if (leftOpen && rightOpen && offX !== 0) {
-                p.wallSlideAxis = 'x';
-                p.wallSlideTarget = (offX < 0 ? leftGX : rightGX) * CELL_SIZE + CELL_SIZE / 2;
+                if (leftOpen && !rightOpen) {
+                    p.wallSlideAxis = 'x';
+                    p.wallSlideTarget = leftGX * CELL_SIZE + CELL_SIZE / 2;
+                } else if (rightOpen && !leftOpen) {
+                    p.wallSlideAxis = 'x';
+                    p.wallSlideTarget = rightGX * CELL_SIZE + CELL_SIZE / 2;
+                } else if (leftOpen && rightOpen && offX !== 0) {
+                    p.wallSlideAxis = 'x';
+                    p.wallSlideTarget = (offX < 0 ? leftGX : rightGX) * CELL_SIZE + CELL_SIZE / 2;
+                } else {
+                }
             } else {
             }
         }
@@ -774,7 +779,7 @@ function applyPlayerMovement(pIdx) {
             const bottom = p.y + PLAYER_COLLISION_RADIUS;
             const gy1 = Math.floor(top / CELL_SIZE);
             const gy2 = Math.floor((bottom - 1e-6) / CELL_SIZE);
-            let wallGY = Math.floor(p.y / CELL_SIZE);
+            let wallGY = -1;
             if (diagGX >= 0 && diagGX < GRID_COLS) {
                 for (let gy = gy1; gy <= gy2; gy++) {
                     if (gy >= 0 && gy < GRID_ROWS && gameState.grid[gy][diagGX] !== CELL_EMPTY) {
@@ -784,30 +789,33 @@ function applyPlayerMovement(pIdx) {
                 }
             }
 
-            const upGY = wallGY - 1;
-            const upOpen = upGY >= 0 &&
-                gameState.grid[upGY][curGX] === CELL_EMPTY &&
-                diagGX >= 0 && diagGX < GRID_COLS &&
-                gameState.grid[upGY][diagGX] === CELL_EMPTY;
+            if (wallGY !== -1) {
+                const upGY = wallGY - 1;
+                const upOpen = upGY >= 0 &&
+                    gameState.grid[upGY][curGX] === CELL_EMPTY &&
+                    diagGX >= 0 && diagGX < GRID_COLS &&
+                    gameState.grid[upGY][diagGX] === CELL_EMPTY;
 
-            const downGY = wallGY + 1;
-            const downOpen = downGY < GRID_ROWS &&
-                gameState.grid[downGY][curGX] === CELL_EMPTY &&
-                diagGX >= 0 && diagGX < GRID_COLS &&
-                gameState.grid[downGY][diagGX] === CELL_EMPTY;
+                const downGY = wallGY + 1;
+                const downOpen = downGY < GRID_ROWS &&
+                    gameState.grid[downGY][curGX] === CELL_EMPTY &&
+                    diagGX >= 0 && diagGX < GRID_COLS &&
+                    gameState.grid[downGY][diagGX] === CELL_EMPTY;
 
-            const cellCY = wallGY * CELL_SIZE + CELL_SIZE / 2;
-            const offY = p.y - cellCY;
+                const cellCY = wallGY * CELL_SIZE + CELL_SIZE / 2;
+                const offY = p.y - cellCY;
 
-            if (upOpen && !downOpen) {
-                p.wallSlideAxis = 'y';
-                p.wallSlideTarget = upGY * CELL_SIZE + CELL_SIZE / 2;
-            } else if (downOpen && !upOpen) {
-                p.wallSlideAxis = 'y';
-                p.wallSlideTarget = downGY * CELL_SIZE + CELL_SIZE / 2;
-            } else if (upOpen && downOpen && offY !== 0) {
-                p.wallSlideAxis = 'y';
-                p.wallSlideTarget = (offY < 0 ? upGY : downGY) * CELL_SIZE + CELL_SIZE / 2;
+                if (upOpen && !downOpen) {
+                    p.wallSlideAxis = 'y';
+                    p.wallSlideTarget = upGY * CELL_SIZE + CELL_SIZE / 2;
+                } else if (downOpen && !upOpen) {
+                    p.wallSlideAxis = 'y';
+                    p.wallSlideTarget = downGY * CELL_SIZE + CELL_SIZE / 2;
+                } else if (upOpen && downOpen && offY !== 0) {
+                    p.wallSlideAxis = 'y';
+                    p.wallSlideTarget = (offY < 0 ? upGY : downGY) * CELL_SIZE + CELL_SIZE / 2;
+                } else {
+                }
             } else {
             }
         }
@@ -834,6 +842,16 @@ function applyPlayerMovement(pIdx) {
     // Derive grid position
     p.gridX = Math.floor(p.x / CELL_SIZE);
     p.gridY = Math.floor(p.y / CELL_SIZE);
+
+    if (p.onOwnBomb && !gameState.bombs.some(b => {
+        if (!b.active || b.owner !== pIdx) return false;
+        const bCX = b.gridX * CELL_SIZE + CELL_SIZE / 2;
+        const bCY = b.gridY * CELL_SIZE + CELL_SIZE / 2;
+        return Math.hypot(p.x - bCX, p.y - bCY) <= CELL_SIZE - 1;
+    })) {
+        p.onOwnBomb = false;
+    }
+
     p.prevDirection = dir;
 
     // Powerup pickup
@@ -858,6 +876,7 @@ function placeBomb(pIdx) {
     if (gameState.bombs.some(b => b.gridX === gx && b.gridY === gy)) return;
 
     p.bombsPlaced++;
+    p.onOwnBomb = true;
     gameState.bombs.push({
         gridX: gx, gridY: gy,
         x: gx * CELL_SIZE + CELL_SIZE / 2,
@@ -903,14 +922,17 @@ function explodeBomb(bomb) {
 
 function checkExplosionEffects() {
     for (const exp of gameState.explosions) {
-        // Destroy soft blocks
         if (gameState.grid[exp.gridY][exp.gridX] === CELL_SOFT_BLOCK) {
             gameState.grid[exp.gridY][exp.gridX] = CELL_EMPTY;
+            gameState.blockAnimations.push({
+                x: exp.gridX * CELL_SIZE + CELL_SIZE / 2,
+                y: exp.gridY * CELL_SIZE + CELL_SIZE / 2,
+                timer: 11
+            });
             if (Math.random() < POWERUP_CHANCE) {
                 spawnPowerup(exp.gridX, exp.gridY);
             }
         }
-        // Kill players (only during dangerous phase, not during safe fade)
         if (exp.timer > EXPLOSION_SAFE_FADE) {
             for (let i = 0; i < MAX_PLAYERS; i++) {
                 const p = gameState.players[i];
@@ -922,6 +944,17 @@ function checkExplosionEffects() {
                 const eTop = exp.gridY * CELL_SIZE, eBottom = (exp.gridY + 1) * CELL_SIZE;
                 if (pRight > eLeft && pLeft < eRight && pBottom > eTop && pTop < eBottom) {
                     p.alive = false;
+                    p.deathTimer = 16;
+                    p.deathX = p.x;
+                    p.deathY = p.y;
+                    p.deathParticles = [];
+                    const color = PLAYER_COLORS[i];
+                    for (let j = 0; j < 8; j++) {
+                        const angle = (j / 8) * Math.PI * 2 + (Math.random() - 0.5) * 0.5;
+                        const speed = 1.5 + Math.random() * 2;
+                        const size = 2 + Math.random() * 3;
+                        p.deathParticles.push({ angle, speed, size });
+                    }
                 }
             }
         }
@@ -987,21 +1020,32 @@ function gameTick() {
     // Check explosion effects on first tick of new explosions
     checkExplosionEffects();
 
-    // Respawn dead players
+    // Update death timers and respawn dead players
     for (let i = 0; i < MAX_PLAYERS; i++) {
         const p = gameState.players[i];
-        if (p.active && !p.alive) {
-            const spawn = PLAYER_SPAWNS[i];
-            p.alive = true;
-            p.x = spawn.gx * CELL_SIZE + CELL_SIZE / 2;
-            p.y = spawn.gy * CELL_SIZE + CELL_SIZE / 2;
-            p.gridX = spawn.gx;
-            p.gridY = spawn.gy;
-            p.direction = 0;
-            p.prevDirection = 0;
-            p.wallSlideAxis = null;
-            p.bombsPlaced = 0;
-            p.onOwnBomb = false;
+        if (!p.active || p.alive) continue;
+        if (p.deathTimer > 0) {
+            p.deathTimer--;
+            continue;
+        }
+        const spawn = PLAYER_SPAWNS[i];
+        p.alive = true;
+        p.x = spawn.gx * CELL_SIZE + CELL_SIZE / 2;
+        p.y = spawn.gy * CELL_SIZE + CELL_SIZE / 2;
+        p.gridX = spawn.gx;
+        p.gridY = spawn.gy;
+        p.direction = 0;
+        p.prevDirection = 0;
+        p.wallSlideAxis = null;
+        p.bombsPlaced = 0;
+        p.onOwnBomb = false;
+    }
+
+    // Update block destruction animations
+    for (let i = gameState.blockAnimations.length - 1; i >= 0; i--) {
+        gameState.blockAnimations[i].timer--;
+        if (gameState.blockAnimations[i].timer <= 0) {
+            gameState.blockAnimations.splice(i, 1);
         }
     }
 
@@ -1558,6 +1602,55 @@ function renderAll() {
     renderBombs();
     renderExplosions();
     renderPlayers();
+    renderDeathAnimations();
+    renderBlockAnimations();
+}
+
+function renderDeathAnimations() {
+    layers.particles.removeChildren();
+    for (let i = 0; i < MAX_PLAYERS; i++) {
+        const p = gameState.players[i];
+        if (!p.active || p.alive || p.deathTimer <= 0) continue;
+        const color = PLAYER_COLORS[i];
+        const progress = 1 - (p.deathTimer / 16);
+        const alpha = 1 - progress;
+        const spread = progress * CELL_SIZE * 0.8;
+
+        const g = new PIXI.Graphics();
+        for (const part of p.deathParticles) {
+            const rx = p.deathX + Math.cos(part.angle) * spread * part.speed * 0.7;
+            const ry = p.deathY + Math.sin(part.angle) * spread * part.speed * 0.7;
+            g.beginFill(color, alpha * 0.9);
+            g.drawCircle(rx, ry, part.size * (1 - progress * 0.5));
+            g.endFill();
+        }
+        layers.particles.addChild(g);
+    }
+}
+
+function renderBlockAnimations() {
+    for (const ba of gameState.blockAnimations) {
+        const progress = 1 - (ba.timer / 11);
+        const alpha = 1 - progress;
+        const spread = progress * CELL_SIZE * 0.6;
+
+        const g = new PIXI.Graphics();
+        const gx = Math.floor(ba.x / CELL_SIZE);
+        const gy = Math.floor(ba.y / CELL_SIZE);
+        for (let j = 0; j < 6; j++) {
+            const seed = Math.sin(gx * 12.9898 + gy * 78.233 + j * 45.164) * 43758.5453;
+            const rnd = seed - Math.floor(seed);
+            const angle = (j / 6) * Math.PI * 2 + (rnd - 0.5) * 0.6;
+            const speed = 0.8 + rnd * 1.5;
+            const rx = ba.x + Math.cos(angle) * spread * speed;
+            const ry = ba.y + Math.sin(angle) * spread * speed;
+            const shade = 0xC48B3C - Math.floor(rnd * 0x303010);
+            g.beginFill(shade, alpha * 0.8);
+            g.drawRect(rx - 3, ry - 3, 5 + rnd * 4, 5 + rnd * 4);
+            g.endFill();
+        }
+        layers.particles.addChild(g);
+    }
 }
 
 // ============================================================
@@ -2283,6 +2376,7 @@ function init() {
     gameState.bombs = [];
     gameState.explosions = [];
     gameState.powerups = [];
+    gameState.blockAnimations = [];
     gameState.message = '';
     appState = AppState.MENU;
     netRole = NetRole.NONE;
